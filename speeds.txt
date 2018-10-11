@@ -1,0 +1,9 @@
+gcc std99 -03
+8.282015
+gcc std99 -O2
+8.247381
+gcc std99
+8.243402
+
+changed divisions into hard-coded numbers
+8.243402 -> 6.127378
