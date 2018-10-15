@@ -6,4 +6,13 @@ gcc std99
 8.243402
 
 changed divisions into hard-coded numbers
-8.243402 -> 6.127378
+6.127378
+
+used -O5
+2.294069
+
+used icc with -Ofast
+2.126225
+
+used icc without -Ofast
+0.328175
