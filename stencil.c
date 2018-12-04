@@ -189,4 +189,5 @@ int main(int argc, char *argv[]) {
 
   output_image(OUTPUT_FILE, nx, ny, image);
   free(image);
+  free(tmp_image);
 }
