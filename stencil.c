@@ -102,8 +102,9 @@ void init_image(const int nx, const int ny, float *  image, float *  tmp_image) 
     for (int i = 0; i < 8; ++i) {
       for (int jj = j*ny/8; jj < (j+1)*ny/8; ++jj) {
         for (int ii = i*nx/8; ii < (i+1)*nx/8; ++ii) {
-          if ((i+j)%2)
-          image[jj+ii*ny] = 100.0;
+          if ((i+j)%2){
+            image[jj+ii*ny] = 100.0;
+          }
         }
       }
     }

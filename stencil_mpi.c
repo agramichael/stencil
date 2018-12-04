@@ -4,6 +4,7 @@
 #include "mpi.h"
 
 #define MASTER 0
+#define OUTPUT_FILE "stencil.pgm"
 
 /* functions */
 int calc_ncols_from_rank(int rank, int size, int NCOLS);
@@ -23,9 +24,8 @@ int main(int argc, char* argv[])
   int local_nrows;       /* number of rows apportioned to this rank */
   int local_ncols;       /* number of columns apportioned to this rank */
   int remote_ncols;      /* number of columns apportioned to a remote rank */
-  double boundary_mean;  /* mean of boundary values used to initialise inner cells */
-  double **u;            /* local temperature grid at time t - 1 */
-  double **w;            /* local temperature grid at time t     */
+  double **tmp_image;            /* local temperature grid at time t - 1 */
+  double **image;            /* local temperature grid at time t     */
   double *sendbuf;       /* buffer to hold values to send */
   double *recvbuf;       /* buffer to hold received values */
   double *printbuf;      /* buffer to hold values for printing */
@@ -43,8 +43,8 @@ int main(int argc, char* argv[])
   }
 
   // Initiliase problem dimensions from command line arguments
-  int NROWS = atoi(argv[1]);
-  int NCOLS = atoi(argv[2]);
+  int NCOLS = atoi(argv[1]);
+  int NROWS = atoi(argv[2]);
   int ITERS = atoi(argv[3]);
 
   /*
@@ -67,13 +67,13 @@ int main(int argc, char* argv[])
   ** - we'll use local grids for current and previous timesteps
   ** - buffers for message passing
   */
-  u = (double**)malloc(sizeof(double*) * local_nrows);
+  tmp_image = (double**)malloc(sizeof(double*) * local_nrows);
   for(ii=0;ii<local_nrows;ii++) {
-    u[ii] = (double*)malloc(sizeof(double) * (local_ncols + 2));
+    tmp_image[ii] = (double*)malloc(sizeof(double) * (local_ncols + 2));
   }
-  w = (double**)malloc(sizeof(double*) * local_nrows);
+  image = (double**)malloc(sizeof(double*) * local_nrows);
   for(ii=0;ii<local_nrows;ii++) {
-    w[ii] = (double*)malloc(sizeof(double) * (local_ncols + 2));
+    image[ii] = (double*)malloc(sizeof(double) * (local_ncols + 2));
   }
   sendbuf = (double*)malloc(sizeof(double) * local_nrows);
   recvbuf = (double*)malloc(sizeof(double) * local_nrows);
@@ -81,6 +81,12 @@ int main(int argc, char* argv[])
      printbuf must be big enough to hold this number */
   remote_ncols = calc_ncols_from_rank(size-1, size, NCOLS);
   printbuf = (double*)malloc(sizeof(double) * (remote_ncols + 2));
+
+  // master allocates space for final image.
+  double **final_image = (double**)malloc(sizeof(double*) * NROWS);
+  for(ii=0;ii<NROWS;ii++) {
+    final_image[ii] = (double*)malloc(sizeof(double) * NCOLS);
+  }
 
   /*
   ** initialize the local grid for the present time (w):
@@ -90,86 +96,105 @@ int main(int argc, char* argv[])
   ** to accomodate the extra halo columns
   ** no need to initialise the halo cells at this point
   */
-  boundary_mean = ((NROWS - 2) * 100.0 * 2 + (NCOLS - 2) * 100.0) / (double) ((2 * NROWS) + (2 * NCOLS) - 4);
+  // initialize all 0; no need to init halo cells.
   for(ii=0;ii<local_nrows;ii++) {
     for(jj=1;jj<local_ncols + 1;jj++) {
-      if(ii == 0)
-	     w[ii][jj] = 0.0;
-      else if(ii == local_nrows-1)
-	     w[ii][jj] = 100.0;
-      else if((rank == 0) && jj == 1)                  /* rank 0 gets leftmost subrid */
-	     w[ii][jj] = 100.0;
-      else if((rank == size - 1) && jj == local_ncols) /* rank (size - 1) gets rightmost subrid */
-	     w[ii][jj] = 100.0;
-      else
-	     w[ii][jj] = boundary_mean;
+	    image[ii][jj] = 0.0;
+      tmp_image[ii][jj] = 0.0;
+    }
+  }
+  // initialize checkerboard
+  int master_ncols = calc_ncols_from_rank(0, size, NCOLS);
+  for (int j = 0; j < 8; j++) {
+    for (int i = 0; i < 8; i++) {
+      if ((i + j) % 2 == 1) {
+        for (jj = j * NCOLS / 8; jj < (j + 1) * NCOLS / 8; jj++) {
+          for (ii = i * NROWS / 8; ii < (i + 1) * NROWS / 8; ii++) {
+            if(local_ncols == master_ncols) {
+              if ((jj > local_ncols * rank - 1) && (jj < local_ncols * (rank + 1))) {
+                image[ii][(jj % local_ncols) + 1] = 100.0;
+              }
+            }
+            else {
+              if (jj > master_ncols * rank - 1) {
+                int col = master_ncols * (rank + 1);
+                if (jj < col) image[ii][(jj % master_ncols) + 1] = 100.0;
+                else {
+                  image[ii][(jj % master_ncols) + 1 + master_ncols] = 100.0;
+                  printf("lol\n");
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 
   /*
   ** time loop
   */
-  for(iter=0;iter<ITERS;iter++) {
-    /*
-    ** halo exchange for the local grids w:
-    ** - first send to the left and receive from the right,
-    ** - then send to the right and receive from the left.
-    ** for each direction:
-    ** - first, pack the send buffer using values from the grid
-    ** - exchange using MPI_Sendrecv()
-    ** - unpack values from the recieve buffer into the grid
-    */
-
-    /* send to the left, receive from right */
-    for(ii=0;ii<local_nrows;ii++)
-      sendbuf[ii] = w[ii][1];
-    MPI_Sendrecv(sendbuf, local_nrows, MPI_DOUBLE, left, tag,
-		 recvbuf, local_nrows, MPI_DOUBLE, right, tag,
-		 MPI_COMM_WORLD, &status);
-    for(ii=0;ii<local_nrows;ii++)
-      w[ii][local_ncols + 1] = recvbuf[ii];
-
-    /* send to the right, receive from left */
-    for(ii=0;ii<local_nrows;ii++)
-      sendbuf[ii] = w[ii][local_ncols];
-    MPI_Sendrecv(sendbuf, local_nrows, MPI_DOUBLE, right, tag,
-		 recvbuf, local_nrows, MPI_DOUBLE, left, tag,
-		 MPI_COMM_WORLD, &status);
-    for(ii=0;ii<local_nrows;ii++)
-      w[ii][0] = recvbuf[ii];
-
-    /*
-    ** copy the old solution into the u grid
-    */
-    for(ii=0;ii<local_nrows;ii++) {
-      for(jj=0;jj<local_ncols + 2;jj++) {
-	       u[ii][jj] = w[ii][jj];
-      }
-    }
-
-    /*
-    ** compute new values of w using u
-    ** looping extents depend on rank, as we don't
-    ** want to overwrite any boundary conditions
-    */
-    for(ii=1;ii<local_nrows-1;ii++) {
-      if(rank == 0) {
-	       start_col = 2;
-	       end_col = local_ncols;
-      }
-      else if(rank == size -1) {
-	       start_col = 1;
-	       end_col = local_ncols - 1;
-      }
-      else {
-	       start_col = 1;
-	       end_col = local_ncols;
-      }
-      for(jj=start_col;jj<end_col + 1;jj++) {
-	       w[ii][jj] = (u[ii - 1][jj] + u[ii + 1][jj] + u[ii][jj - 1] + u[ii][jj + 1]) / 4.0;
-      }
-    }
-  }
+  // for(iter=0;iter<ITERS;iter++) {
+  //   /*
+  //   ** halo exchange for the local grids w:
+  //   ** - first send to the left and receive from the right,
+  //   ** - then send to the right and receive from the left.
+  //   ** for each direction:
+  //   ** - first, pack the send buffer using values from the grid
+  //   ** - exchange using MPI_Sendrecv()
+  //   ** - unpack values from the recieve buffer into the grid
+  //   */
+  //
+  //   /* send to the left, receive from right */
+  //   for(ii=0;ii<local_nrows;ii++)
+  //     sendbuf[ii] = image[ii][1];
+  //   MPI_Sendrecv(sendbuf, local_nrows, MPI_DOUBLE, left, tag,
+	// 	 recvbuf, local_nrows, MPI_DOUBLE, right, tag,
+	// 	 MPI_COMM_WORLD, &status);
+  //   for(ii=0;ii<local_nrows;ii++)
+  //     image[ii][local_ncols + 1] = recvbuf[ii];
+  //
+  //   /* send to the right, receive from left */
+  //   for(ii=0;ii<local_nrows;ii++)
+  //     sendbuf[ii] = image[ii][local_ncols];
+  //   MPI_Sendrecv(sendbuf, local_nrows, MPI_DOUBLE, right, tag,
+	// 	 recvbuf, local_nrows, MPI_DOUBLE, left, tag,
+	// 	 MPI_COMM_WORLD, &status);
+  //   for(ii=0;ii<local_nrows;ii++)
+  //     image[ii][0] = recvbuf[ii];
+  //
+  //   /*
+  //   ** copy the old solution into the u grid
+  //   */
+  //   for(ii=0;ii<local_nrows;ii++) {
+  //     for(jj=0;jj<local_ncols + 2;jj++) {
+	//        tmp_image[ii][jj] = image[ii][jj];
+  //     }
+  //   }
+  //
+  //   /*
+  //   ** compute new values of w using u
+  //   ** looping extents depend on rank, as we don't
+  //   ** want to overwrite any boundary conditions
+  //   */
+  //   for(ii=1;ii<local_nrows-1;ii++) {
+  //     if(rank == 0) {
+	//        start_col = 2;
+	//        end_col = local_ncols;
+  //     }
+  //     else if(rank == size -1) {
+	//        start_col = 1;
+	//        end_col = local_ncols - 1;
+  //     }
+  //     else {
+	//        start_col = 1;
+	//        end_col = local_ncols;
+  //     }
+  //     for(jj=start_col;jj<end_col + 1;jj++) {
+	//        image[ii][jj] = (tmp_image[ii - 1][jj] + tmp_image[ii + 1][jj] + tmp_image[ii][jj - 1] + tmp_image[ii][jj + 1]) / 4.0;
+  //     }
+  //   }
+  // }
 
   /*
   ** at the end, write out the solution.
@@ -178,43 +203,73 @@ int main(int argc, char* argv[])
   ** - then it receives row values sent from the other
   **   ranks in order, and prints them.
   */
-  if(rank == MASTER) {
-    printf("NROWS: %d\nNCOLS: %d\n",NROWS,NCOLS);
-    printf("Final temperature distribution over heated plate:\n");
-  }
 
   for(ii=0;ii<local_nrows;ii++) {
-    if(rank == 0) {
+    if(rank == MASTER) {
+      //Build image.
       for(jj=1;jj<local_ncols + 1;jj++) {
-	       printf("%6.2f ",w[ii][jj]);
+         final_image[ii][jj-1] = image[ii][jj];
+	       //printf("%6.2f ",image[ii][jj]);
       }
       for(kk=1;kk<size;kk++) { /* loop over other ranks */
 	       remote_ncols = calc_ncols_from_rank(kk, size, NCOLS);
 	       MPI_Recv(printbuf,remote_ncols + 2,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD,&status);
 	       for(jj=1;jj<remote_ncols + 1;jj++) {
-	          printf("%6.2f ",printbuf[jj]);
+           final_image[ii][kk*local_ncols+(jj-1)] = printbuf[jj];
+	         //printf("%6.2f ",printbuf[jj]);
 	       }
       }
-      printf("\n");
+      //printf("\n");
     }
     else {
-      MPI_Send(w[ii],local_ncols + 2,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
+      MPI_Send(image[ii],local_ncols + 2,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
     }
   }
 
-  if(rank == MASTER)
-    printf("\n");
+  // Save to stencil.pgm
+  if(rank == MASTER) {
+    //Open output image.
+    FILE *fp = fopen(OUTPUT_FILE, "w");
+    if (!fp) {
+      fprintf(stderr, "Error: Could not open %s\n", OUTPUT_FILE);
+      exit(EXIT_FAILURE);
+    }
+    // Ouptut image header
+    fprintf(fp, "P5 %d %d 255\n", NCOLS, NROWS);
 
+    // Calculate maximum value of image
+    // This is used to rescale the values
+    // to a range of 0-255 for output
+    double maximum = 0.0;
+    for (jj = 0; jj < NCOLS; jj++) {
+      for (ii = 0; ii < NROWS; ii++) {
+        if (final_image[ii][jj] > maximum)
+          maximum = final_image[ii][jj];
+      }
+    }
+
+    // Output image, converting to numbers 0-255
+    for (jj = 0; jj < NCOLS; jj++) {
+      for (ii = 0; ii < NROWS; ii++) {
+        fputc((char)(255.0*final_image[ii][jj]/maximum), fp);
+      }
+    }
+
+    // Close the file
+    fclose(fp);
+
+    //printf("\n");
+  }
   /* don't forget to tidy up when we're done */
   MPI_Finalize();
 
   /* free up allocated memory */
   for(ii=0;ii<local_nrows;ii++) {
-    free(u[ii]);
-    free(w[ii]);
+    free(tmp_image[ii]);
+    free(image[ii]);
   }
-  free(u);
-  free(w);
+  free(tmp_image);
+  free(image);
   free(sendbuf);
   free(recvbuf);
   free(printbuf);
