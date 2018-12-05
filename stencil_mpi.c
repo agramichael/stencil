@@ -8,8 +8,8 @@
 #define OUTPUT_FILE "stencil_mpi.pgm"
 
 /* functions */
-int calc_nrows_from_rank(int rank, int size, int NROWS);
-void output_image(const char * file_name, const int NCOLS, const int NROWS, double **image);
+int calc_nx_from_rank(int rank, int size, int nx);
+void output_image(const char * file_name, const int nx, const int ny, double *image);
 double wtime(void);
 
 
@@ -26,14 +26,15 @@ int main(int argc, char* argv[])
   int size;              /* number of processes in the communicator */
   int tag = 0;           /* scope for adding extra information to a message */
   MPI_Status status;     /* struct used by MPI_Recv */
-  int local_nrows;       /* number of rows apportioned to this rank */
-  int local_ncols;       /* number of columns apportioned to this rank */
-  int remote_nrows;      /* number of columns apportioned to a remote rank */
-  double **tmp_image;            /* local temperature grid at time t - 1 */
-  double **image;            /* local temperature grid at time t     */
+  int local_nx;       /* number of rows apportioned to this rank */
+  int remote_nx;      /* number of columns apportioned to a remote rank */
+  int nx, ny, niters;
+  double *tmp_image;            /* local temperature grid at time t - 1 */
+  double *image;            /* local temperature grid at time t     */
   double *sendbuf;       /* buffer to hold values to send */
   double *recvbuf;       /* buffer to hold received values */
   double *printbuf;      /* buffer to hold values for printing */
+  double *final_image;
 
   /* MPI_Init returns once it has started up processes */
   /* get size and rank */
@@ -48,10 +49,9 @@ int main(int argc, char* argv[])
   }
 
   // Initialise problem dimensions from command line arguments
-  int NCOLS = atoi(argv[1]);
-  int NROWS = atoi(argv[2]);
-  int ITERS = atoi(argv[3]);
-  if (rank == MASTER) printf("NCOLS: %d NROWS: %d NITERS: %d \n", NCOLS, NROWS, ITERS);
+  nx = atoi(argv[1]);
+  ny = atoi(argv[2]);
+  niters = atoi(argv[3]);
 
   /*
   ** determine process ranks to the left and right of rank
@@ -64,35 +64,24 @@ int main(int argc, char* argv[])
   ** determine local grid size
   ** each rank gets all the rows, but a subset of the number of columns
   */
-  local_ncols = NCOLS;
-  local_nrows = calc_nrows_from_rank(rank, size, NROWS);
-
+  local_nx = calc_nx_from_rank(rank, size, nx);
   /*
   ** allocate space for:
   ** - the local grid (2 extra columns added for the halos)
   ** - we'll use local grids for current and previous timesteps
   ** - buffers for message passing
   */
-  tmp_image = (double**) malloc(sizeof(double*) * (local_nrows + 2));
-  for (ii = 0; ii < (local_nrows + 2); ii++) {
-    tmp_image[ii] = (double*) malloc(sizeof(double) * local_ncols);
-  }
-  image = (double**) malloc(sizeof(double*) * (local_nrows + 2));
-  for (ii = 0; ii < (local_nrows + 2); ii++) {
-    image[ii] = (double*) malloc(sizeof(double) * local_ncols);
-  }
-  sendbuf = (double*) malloc(sizeof(double) * local_nrows);
-  recvbuf = (double*) malloc(sizeof(double) * local_nrows);
+  tmp_image = (double*) malloc(sizeof(double) * (local_nx+2) * ny);
+  image = (double*) malloc(sizeof(double) * (local_nx+2) * ny);
+  sendbuf = (double*) malloc(sizeof(double) * ny);
+  recvbuf = (double*) malloc(sizeof(double) * ny);
   /* The last rank has the most columns apportioned.
      printbuf must be big enough to hold this number */
-  //remote_nrows = calc_nrows_from_rank(size-1, size, NROWS);
-  printbuf = (double*) malloc(sizeof(double) * local_ncols);
+  remote_nx = calc_nx_from_rank(size-1, size, nx);
+  printbuf = (double*) malloc(sizeof(double) * (remote_nx+2) * ny);
 
-  // master allocates space for final image.
-  double **final_image = (double**) malloc(sizeof(double*) * NROWS);
-  for (ii = 0; ii < NROWS; ii++) {
-    final_image[ii] = (double*) malloc(sizeof(double) * NCOLS);
-  }
+  // allocates space for final image.
+  final_image = (double*) malloc(sizeof(double) * nx * ny);
 
   /*
   ** initialize the local grid for the present time (w):
@@ -102,31 +91,36 @@ int main(int argc, char* argv[])
   ** to accomodate the extra halo columns
   ** no need to initialise the halo cells at this point
   */
-  // initialize all 0; no need to init halo cells.
-  for (ii = 1; ii < local_nrows + 1; ii++) {
-    for (jj = 0; jj < local_ncols; jj++) {
-	    image[ii][jj] = 0.0;
-      tmp_image[ii][jj] = 0.0;
+
+  //Blank
+  for (j = 0; j < ny; ++j) {
+    for (i = 1; i < local_nx + 1; ++i) {
+      image[j + i * ny] = 0.0;
+      tmp_image[j + i * ny] = 0.0;
     }
   }
-  // initialize checkerboard
-  int master_nrows = calc_nrows_from_rank(0, size, NROWS);
-  for (j = 0; j < 8; j++) {
-    for (i = 0; i < 8; i++) {
-      if ((i + j) % 2 == 1) {
-        for (jj = j * NCOLS / 8; jj < (j + 1) * NCOLS / 8; jj++) {
-          for (ii = i * NROWS / 8; ii < (i + 1) * NROWS / 8; ii++) {
-            if (local_nrows == master_nrows) {
-              if ((ii > local_nrows * rank - 1) && (ii < local_nrows * (rank + 1))) {
-                image[(ii % local_nrows) + 1][jj] = 100.0;
+  // Checkerboard
+  int master_nx = calc_nx_from_rank(0, size, nx);
+  int start = master_nx * rank * ny;
+  int end = master_nx * (rank + 1) * ny;
+
+  for (j = 0; j < 8; ++j) {
+    for (i = 0; i < 8; ++i) {
+      if ((i+j)%2){
+        for (jj = j*ny/8; jj < (j+1)*ny/8; ++jj) {
+          for (ii = i*nx/8; ii < (i+1)*nx/8; ++ii) {
+            int current = jj + ii * ny;
+            if (local_nx == master_nx) {
+              if ((current >= start) && (current < end)) {
+                image[jj + ((ii%local_nx)+1) * ny] = 100.0;
               }
             }
             else {
-              if (ii > master_nrows * rank - 1) {
-                int row = master_nrows * (rank + 1);
-                if (ii < row) image[(ii % master_nrows) + 1][jj] = 100.0;
+              if (current >= start) {
+                if (current < end) image[jj + ((ii%master_nx)+1) * ny] = 100.0;
                 else {
-                  image[(ii % master_nrows) + 1 + master_nrows][jj] = 100.0;
+                  printf("hi there. ");
+                  image[jj + ((ii%master_nx) + 1 + master_nx) * ny] = 100.0;
                 }
               }
             }
@@ -222,41 +216,36 @@ int main(int argc, char* argv[])
   **   ranks in order, and prints them.
   */
 
-  for (ii = 1; ii < local_nrows + 1; ii++) {
+  for (ii = 1; ii < local_nx + 1; ii++) {
     if(rank == MASTER) {
       //Build image.
-      for (jj = 0; jj < local_ncols; jj++) {
-         final_image[ii-1][jj] = image[ii][jj];
+      for (jj = 0; jj < ny; jj++) {
+         final_image[jj + (ii-1) * ny] = image[jj + ii * ny];
 	       //printf("%6.2f ",image[ii][jj]);
       }
       for(kk=1;kk<size;kk++) { /* loop over other ranks */
-	       //remote_nrows = calc_nrows_from_rank(kk, size, NROWS);
-	       MPI_Recv(printbuf,local_ncols,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD,&status);
-	       for(jj=0; jj < local_ncols;jj++) {
-           final_image[kk * local_nrows + (ii - 1)][jj] = printbuf[jj];
+	       remote_nx = calc_nx_from_rank(kk, size, nx);
+	       MPI_Recv(printbuf,ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD,&status);
+	       for(jj=0; jj < ny;jj++) {
+           final_image[jj + (kk * local_nx + (ii - 1)) * ny] = printbuf[jj];
 	         //printf("%6.2f ",printbuf[jj]);
 	       }
       }
       //printf("\n");
     }
     else {
-      MPI_Send(image[ii],local_ncols,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
+      MPI_Send(&image[ii * ny],ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
     }
   }
-
-  // Save to stencil.pgm
+  //Save to stencil.pgm
   if(rank == MASTER) {
-    output_image(OUTPUT_FILE, NCOLS, NROWS, final_image);
-    //printf("\n");
+    output_image(OUTPUT_FILE, nx, ny, final_image);
   }
   /* don't forget to tidy up when we're done */
   MPI_Finalize();
 
   /* free up allocated memory */
-  for(ii=0;ii<local_nrows;ii++) {
-    free(tmp_image[ii]);
-    free(image[ii]);
-  }
+  free(final_image);
   free(tmp_image);
   free(image);
   free(sendbuf);
@@ -267,32 +256,33 @@ int main(int argc, char* argv[])
   return EXIT_SUCCESS;
 }
 
-void output_image(const char * file_name, const int NCOLS, const int NROWS, double **image) {
+void output_image(const char * file_name, const int nx, const int ny, double *image) {
 
+  // Open output file
   FILE *fp = fopen(file_name, "w");
   if (!fp) {
     fprintf(stderr, "Error: Could not open %s\n", OUTPUT_FILE);
     exit(EXIT_FAILURE);
   }
+
   // Ouptut image header
-  fprintf(fp, "P5 %d %d 255\n", NCOLS, NROWS);
+  fprintf(fp, "P5 %d %d 255\n", nx, ny);
 
   // Calculate maximum value of image
   // This is used to rescale the values
-  // to a range of 0-255 for
-  int ii, jj;
+  // to a range of 0-255 for output
   double maximum = 0.0;
-  for (jj = 0; jj < NCOLS; jj++) {
-    for (ii = 0; ii < NROWS; ii++) {
-      if (image[ii][jj] > maximum)
-        maximum = image[ii][jj];
+  for (int j = 0; j < ny; ++j) {
+    for (int i = 0; i < nx; ++i) {
+      if (image[j+i*ny] > maximum)
+        maximum = image[j+i*ny];
     }
   }
 
   // Output image, converting to numbers 0-255
-  for (jj = 0; jj < NCOLS; jj++) {
-    for (ii = 0; ii < NROWS; ii++) {
-      fputc((char)(255.0*image[ii][jj]/maximum), fp);
+  for (int j = 0; j < ny; ++j) {
+    for (int i = 0; i < nx; ++i) {
+      fputc((char)(255.0*image[j+i*ny]/maximum), fp);
     }
   }
 
@@ -302,17 +292,17 @@ void output_image(const char * file_name, const int NCOLS, const int NROWS, doub
 }
 
 
-int calc_nrows_from_rank(int rank, int size, int NROWS) {
+int calc_nx_from_rank(int rank, int size, int nx) {
 
-  int nrows;
+  int ncols;
 
-  nrows = NROWS / size;       /* integer division */
-  if ((NROWS % size) != 0) {  /* if there is a remainder */
+  ncols = nx / size;       /* integer division */
+  if ((nx % size) != 0) {  /* if there is a remainder */
     if (rank == size - 1)
-      nrows += NROWS % size;  /* add remainder to last rank */
+      ncols += nx % size;  /* add remainder to last rank */
   }
 
-  return nrows;
+  return ncols;
 }
 
 // Get the current time in seconds since the Epoch

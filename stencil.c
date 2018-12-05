@@ -174,19 +174,19 @@ int main(int argc, char *argv[]) {
   // Set the input image
   init_image(nx, ny, image, tmp_image);
 
-  // Call the stencil kernel
-  double tic = wtime();
-  for (int t = 0; t < niters; ++t) {
-    stencil(nx, ny, image, tmp_image);
-    stencil(nx, ny, tmp_image, image);
-  }
-  double toc = wtime();
-
-
-  // Output
-  printf("------------------------------------\n");
-  printf(" runtime: %lf s\n", toc-tic);
-  printf("------------------------------------\n");
+  // // Call the stencil kernel
+  // double tic = wtime();
+  // for (int t = 0; t < niters; ++t) {
+  //   stencil(nx, ny, image, tmp_image);
+  //   stencil(nx, ny, tmp_image, image);
+  // }
+  // double toc = wtime();
+  //
+  //
+  // // Output
+  // printf("------------------------------------\n");
+  // printf(" runtime: %lf s\n", toc-tic);
+  // printf("------------------------------------\n");
 
   output_image(OUTPUT_FILE, nx, ny, image);
   free(image);
