@@ -16,6 +16,7 @@ double wtime(void);
 int main(int argc, char* argv[])
 {
   int ii,jj;             /* row and column indices for the grid */
+  int i,j;               /* stencil indices */
   int kk;                /* index for looping over ranks */
   int start_row,end_row; /* rank dependent looping indices */
   int iter;              /* index for timestep iterations */
@@ -110,8 +111,8 @@ int main(int argc, char* argv[])
   }
   // initialize checkerboard
   int master_nrows = calc_nrows_from_rank(0, size, NROWS);
-  for (int j = 0; j < 8; j++) {
-    for (int i = 0; i < 8; i++) {
+  for (j = 0; j < 8; j++) {
+    for (i = 0; i < 8; i++) {
       if ((i + j) % 2 == 1) {
         for (jj = j * NCOLS / 8; jj < (j + 1) * NCOLS / 8; jj++) {
           for (ii = i * NROWS / 8; ii < (i + 1) * NROWS / 8; ii++) {
