@@ -271,17 +271,18 @@ void output_image(const char * file_name, const int nx, const int ny, double *im
   // Calculate maximum value of image
   // This is used to rescale the values
   // to a range of 0-255 for output
+  int i,j;
   double maximum = 0.0;
-  for (int j = 0; j < ny; ++j) {
-    for (int i = 0; i < nx; ++i) {
+  for (j = 0; j < ny; ++j) {
+    for (i = 0; i < nx; ++i) {
       if (image[j+i*ny] > maximum)
         maximum = image[j+i*ny];
     }
   }
 
   // Output image, converting to numbers 0-255
-  for (int j = 0; j < ny; ++j) {
-    for (int i = 0; i < nx; ++i) {
+  for (j = 0; j < ny; ++j) {
+    for (i = 0; i < nx; ++i) {
       fputc((char)(255.0*image[j+i*ny]/maximum), fp);
     }
   }
