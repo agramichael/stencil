@@ -8,8 +8,9 @@
 #define OUTPUT_FILE "stencil_mpi.pgm"
 
 /* functions */
-int calc_nx_from_rank(int rank, int size, int nx);
+void init_image(const int nx, const int ny, double *image);
 void output_image(const char * file_name, const int nx, const int ny, double *image);
+int calc_nx_from_rank(int rank, int size, int nx);
 double wtime(void);
 
 
@@ -180,8 +181,6 @@ int main(int argc, char* argv[])
 
     /*
     ** compute new values of image using tmp_image
-    ** looping extents depend on rank, as we don't
-    ** want to overwrite any boundary conditions
     */
     for (ii = 1; ii < local_nx + 1; ii++) {
       // top edge of local grid (jj = 0)
@@ -269,6 +268,32 @@ int main(int argc, char* argv[])
     }
   }
 
+  /*
+  ** at the end, save the solution to final_image.
+  ** for each column of the grid:
+  ** - rank 0 first save its cell values
+  ** - then it receives column values sent from the other
+  **   ranks in order, and saves them.
+  */
+
+  for (ii = 1; ii < local_nx + 1; ii++) {
+    if(rank == MASTER) {
+      for (jj = 0; jj < ny; jj++) {
+         final_image[jj + (ii-1) * ny] = image[jj + ii * ny];
+      }
+      for (kk = 1; kk < size; kk++) { /* loop over other ranks */
+	       remote_nx = calc_nx_from_rank(kk, size, nx);
+	       MPI_Recv(printbuf,ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD,&status);
+	       for (jj = 0; jj < ny; jj++) {
+           final_image[jj + (kk * local_nx + (ii - 1)) * ny] = printbuf[jj];
+	       }
+      }
+    }
+    else {
+      MPI_Send(&image[ii * ny],ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
+    }
+  }
+
   MPI_Barrier(MPI_COMM_WORLD);
   double toc = wtime();
 
@@ -279,35 +304,6 @@ int main(int argc, char* argv[])
     printf("------------------------------------\n");
   }
 
-  /*
-  ** at the end, write out the solution.
-  ** for each row of the grid:
-  ** - rank 0 first prints out its cell values
-  ** - then it receives row values sent from the other
-  **   ranks in order, and prints them.
-  */
-
-  for (ii = 1; ii < local_nx + 1; ii++) {
-    if(rank == MASTER) {
-      //Build image.
-      for (jj = 0; jj < ny; jj++) {
-         final_image[jj + (ii-1) * ny] = image[jj + ii * ny];
-	       //printf("%6.2f ",image[ii][jj]);
-      }
-      for(kk=1;kk<size;kk++) { /* loop over other ranks */
-	       remote_nx = calc_nx_from_rank(kk, size, nx);
-	       MPI_Recv(printbuf,ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD,&status);
-	       for(jj=0; jj < ny;jj++) {
-           final_image[jj + (kk * local_nx + (ii - 1)) * ny] = printbuf[jj];
-	         //printf("%6.2f ",printbuf[jj]);
-	       }
-      }
-      //printf("\n");
-    }
-    else {
-      MPI_Send(&image[ii * ny],ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
-    }
-  }
   //Save to stencil.pgm
   if(rank == MASTER) {
     output_image(OUTPUT_FILE, nx, ny, final_image);
@@ -326,6 +322,28 @@ int main(int argc, char* argv[])
   /* and exit the program */
   return EXIT_SUCCESS;
 }
+
+void init_image(const int nx, const int ny, double *image) {
+  // Zero everything
+  for (int j = 0; j < ny; ++j) {
+    for (int i = 0; i < nx; ++i) {
+      image[j+i*ny] = 0.0;
+    }
+  }
+  // Checkerboard
+  for (int j = 0; j < 8; ++j) {
+    for (int i = 0; i < 8; ++i) {
+      for (int jj = j*ny/8; jj < (j+1)*ny/8; ++jj) {
+        for (int ii = i*nx/8; ii < (i+1)*nx/8; ++ii) {
+          if ((i+j)%2){
+            image[jj+ii*ny] = 100.0;
+          }
+        }
+      }
+    }
+  }
+}
+
 
 void output_image(const char * file_name, const int nx, const int ny, double *image) {
 
