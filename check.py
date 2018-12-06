@@ -71,4 +71,3 @@ if passed:
 else:
     print "Comparison failed"
 print 80*"-"
-
