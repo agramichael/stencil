@@ -17,6 +17,7 @@ int main(int argc, char* argv[])
 {
   int ii,jj;             /* row and column indices for the grid */
   int i,j;               /* stencil indices */
+  int k;
   int kk;                /* index for looping over ranks */
   int start_row,end_row; /* rank dependent looping indices */
   int iter;              /* index for timestep iterations */
@@ -119,7 +120,6 @@ int main(int argc, char* argv[])
               if (current >= start) {
                 if (current < end) image[jj + ((ii%master_nx)+1) * ny] = 100.0;
                 else {
-                  printf("hi there. ");
                   image[jj + ((ii%master_nx) + 1 + master_nx) * ny] = 100.0;
                 }
               }
@@ -136,67 +136,138 @@ int main(int argc, char* argv[])
   /*
   ** Perform 5-point stencil.
   */
-  // for(iter=0;iter<ITERS;iter++) {
-  //   /*
-  //   ** halo exchange for the local grids w:
-  //   ** - first send to the left and receive from the right,
-  //   ** - then send to the right and receive from the left.
-  //   ** for each direction:
-  //   ** - first, pack the send buffer using values from the grid
-  //   ** - exchange using MPI_Sendrecv()
-  //   ** - unpack values from the recieve buffer into the grid
-  //   */
-  //
-  //   /* send to the left, receive from right */
-  //   for(ii=0;ii<local_nrows;ii++)
-  //     sendbuf[ii] = image[ii][1];
-  //   MPI_Sendrecv(sendbuf, local_nrows, MPI_DOUBLE, left, tag,
-	// 	 recvbuf, local_nrows, MPI_DOUBLE, right, tag,
-	// 	 MPI_COMM_WORLD, &status);
-  //   for(ii=0;ii<local_nrows;ii++)
-  //     image[ii][local_ncols + 1] = recvbuf[ii];
-  //
-  //   /* send to the right, receive from left */
-  //   for(ii=0;ii<local_nrows;ii++)
-  //     sendbuf[ii] = image[ii][local_ncols];
-  //   MPI_Sendrecv(sendbuf, local_nrows, MPI_DOUBLE, right, tag,
-	// 	 recvbuf, local_nrows, MPI_DOUBLE, left, tag,
-	// 	 MPI_COMM_WORLD, &status);
-  //   for(ii=0;ii<local_nrows;ii++)
-  //     image[ii][0] = recvbuf[ii];
-  //
-  //   /*
-  //   ** copy the old solution into the u grid
-  //   */
-  //   for(ii=0;ii<local_nrows;ii++) {
-  //     for(jj=0;jj<local_ncols + 2;jj++) {
-	//        tmp_image[ii][jj] = image[ii][jj];
-  //     }
-  //   }
-  //
-  //   /*
-  //   ** compute new values of w using u
-  //   ** looping extents depend on rank, as we don't
-  //   ** want to overwrite any boundary conditions
-  //   */
-  //   for(ii=1;ii<local_nrows-1;ii++) {
-  //     if(rank == 0) {
-	//        start_col = 2;
-	//        end_col = local_ncols;
-  //     }
-  //     else if(rank == size -1) {
-	//        start_col = 1;
-	//        end_col = local_ncols - 1;
-  //     }
-  //     else {
-	//        start_col = 1;
-	//        end_col = local_ncols;
-  //     }
-  //     for(jj=start_col;jj<end_col + 1;jj++) {
-	//        image[ii][jj] = (tmp_image[ii - 1][jj] + tmp_image[ii + 1][jj] + tmp_image[ii][jj - 1] + tmp_image[ii][jj + 1]) / 4.0;
-  //     }
-  //   }
-  // }
+  for (iter = 0; iter < niters*2; iter++) {
+    /*
+    ** halo exchange for the local grids (image):
+    ** - first send to the left and receive from the right,
+    ** - then send to the right and receive from the left.
+    ** for each direction:
+    ** - first, pack the send buffer using values from the grid
+    ** - exchange using MPI_Sendrecv()
+    ** - unpack values from the recieve buffer into the grid
+    */
+
+    /* send to the left, receive from right */
+    //put first column in buffer;
+    for (jj = 0; jj < ny; jj++) {
+      sendbuf[jj] = image[jj];
+    }
+    MPI_Sendrecv(sendbuf, ny, MPI_DOUBLE, left, tag,
+		 recvbuf, ny, MPI_DOUBLE, right, tag,
+		 MPI_COMM_WORLD, &status);
+    for (jj = 0; jj < ny; jj++) {
+      image[jj + (local_nx + 1) * ny] = recvbuf[jj];
+    }
+
+    /* send to the right, receive from left */
+    for (jj = 0; jj < ny; jj++) {
+      sendbuf[jj] = image[jj + (local_nx + 1) * ny];
+    }
+    MPI_Sendrecv(sendbuf, ny, MPI_DOUBLE, right, tag,
+		 recvbuf, ny, MPI_DOUBLE, left, tag,
+		 MPI_COMM_WORLD, &status);
+    for (jj = 0; jj < ny; jj++) {
+      image[jj] = recvbuf[jj];
+    }
+    /*
+    ** copy the old solution into the tmp_image grid
+    */
+    for (jj = 0; jj < ny; jj++) {
+      for (ii = 0; ii < local_nx + 2; ii++) {
+	       tmp_image[jj + ii * ny] = image[jj + ii * ny];
+      }
+    }
+
+    /*
+    ** compute new values of image using tmp_image
+    ** looping extents depend on rank, as we don't
+    ** want to overwrite any boundary conditions
+    */
+    for (ii = 1; ii < local_nx + 1; ii++) {
+      // top edge of local grid (jj = 0)
+      k = ii * ny;
+      image[k] = tmp_image[k] * 0.6;
+      image[k] += tmp_image[k-ny] * 0.1;
+      image[k] += tmp_image[k+ny] * 0.1;
+      // image[k] += tmp_image[k-1] * 0.1;
+      image[k] += tmp_image[k+1] * 0.1;
+      // bottom edge of local grid (jj = ny - 1)
+      k = (ny - 1) + ii * ny;
+      image[k] = tmp_image[k] * 0.6;
+      image[k] += tmp_image[k-ny] * 0.1;
+      image[k] += tmp_image[k+ny] * 0.1;
+      image[k] += tmp_image[k-1] * 0.1;
+      // image[k] += tmp_image[k+1] * 0.1;
+
+      // core cells of local grid
+      for (jj = 1; jj < ny - 1; jj++) {
+        k = jj + ii * ny;
+        image[k] = tmp_image[k] * 0.6;
+        image[k] += tmp_image[k-ny] * 0.1;
+        image[k] += tmp_image[k+ny] * 0.1;
+        image[k] += tmp_image[k-1] * 0.1;
+        image[k] += tmp_image[k+1] * 0.1;
+      }
+    }
+    // do left edge, top left and bottom left if MASTER (ii = 1)
+    if (rank == MASTER) {
+
+      //top left
+      k = 0;
+      image[k] = tmp_image[k] * 0.6;
+      //image[k] += tmp_image[k-ny] * 0.1;
+      image[k] += tmp_image[k+ny] * 0.1;
+      //image[k] += tmp_image[k-1] * 0.1;
+      image[k] += tmp_image[k+1] * 0.1;
+
+      // bottom left
+      k = 2 * ny - 1;
+      image[k] = tmp_image[k] * 0.6;
+      // image[k] += tmp_image[k-ny] * 0.1;
+      image[k] += tmp_image[k+ny] * 0.1;
+      image[k] += tmp_image[k-1] * 0.1;
+      // image[k] += tmp_image[k+1] * 0.1;
+
+      //left edge
+      for (jj = 1; jj < ny - 1; jj++) {
+        k = jj + ny;
+        image[k] = tmp_image[k] * 0.6;
+        // image[k] += tmp_image[k-ny] * 0.1;
+        image[k] += tmp_image[k+ny] * 0.1;
+        image[k] += tmp_image[k-1] * 0.1;
+        image[k] += tmp_image[k+1] * 0.1;
+      }
+    }
+
+    // do right edge, top right and bottom right if last (ii = local_nx)
+    if (rank == size - 1) {
+      // top right
+      k = local_nx * ny;
+      image[k] = tmp_image[k] * 0.6;
+      image[k] += tmp_image[k-ny] * 0.1;
+      // image[k] += tmp_image[k+ny] * 0.1;
+      // image[k] += tmp_image[k-1] * 0.1;
+      image[k] += tmp_image[k+1] * 0.1;
+
+      // bottom right
+      k = local_nx * ny + (ny - 1);
+      image[k] = tmp_image[k] * 0.6;
+      image[k] += tmp_image[k-ny] * 0.1;
+      image[k] += tmp_image[k+ny] * 0.1;
+      image[k] += tmp_image[k-1] * 0.1;
+      image[k] += tmp_image[k+1] * 0.1;
+
+      // right edge
+      for (jj = 1; jj < ny - 1; jj++) {
+        k = jj + local_nx * ny;
+        image[k] = tmp_image[k] * 0.6;
+        image[k] += tmp_image[k-ny] * 0.1;
+        // image[k] += tmp_image[k+ny] * 0.1;
+        image[k] += tmp_image[k-1] * 0.1;
+        image[k] += tmp_image[k+1] * 0.1;
+      }
+    }
+  }
 
   MPI_Barrier(MPI_COMM_WORLD);
   double toc = wtime();
