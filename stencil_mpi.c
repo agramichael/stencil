@@ -37,6 +37,7 @@ int main(int argc, char* argv[])
   double *recvbuf;       /* buffer to hold received values */
   double *printbuf;      /* buffer to hold values for printing */
   double *final_image;
+  double tic, toc;
 
   /* MPI_Init returns once it has started up processes */
   /* get size and rank */
@@ -82,57 +83,37 @@ int main(int argc, char* argv[])
   remote_nx = calc_nx_from_rank(size-1, size, nx);
   printbuf = (double*) malloc(sizeof(double) * (remote_nx+2) * ny);
 
-  // allocates space for final image.
-  final_image = (double*) malloc(sizeof(double) * nx * ny);
-
-  /*
-  ** initialize the local grid for the present time (w):
-  ** - set boundary conditions for any boundaries that occur in the local grid
-  ** - initialize inner cells to the average of all boundary cells
-  ** note the looping bounds for index jj is modified
-  ** to accomodate the extra halo columns
-  ** no need to initialise the halo cells at this point
-  */
-
-  //Blank
-  for (j = 0; j < ny; ++j) {
-    for (i = 1; i < local_nx + 1; ++i) {
-      image[j + i * ny] = 0.0;
-      tmp_image[j + i * ny] = 0.0;
-    }
-  }
-  // Checkerboard
-  int master_nx = calc_nx_from_rank(0, size, nx);
-  int start = master_nx * rank * ny;
-  int end = master_nx * (rank + 1) * ny;
-
-  for (j = 0; j < 8; ++j) {
-    for (i = 0; i < 8; ++i) {
-      if ((i+j)%2){
-        for (jj = j*ny/8; jj < (j+1)*ny/8; ++jj) {
-          for (ii = i*nx/8; ii < (i+1)*nx/8; ++ii) {
-            int current = jj + ii * ny;
-            if (local_nx == master_nx) {
-              if ((current >= start) && (current < end)) {
-                image[jj + ((ii%local_nx)+1) * ny] = 100.0;
-              }
-            }
-            else {
-              if (current >= start) {
-                if (current < end) image[jj + ((ii%master_nx)+1) * ny] = 100.0;
-                else {
-                  image[jj + ((ii%master_nx) + 1 + master_nx) * ny] = 100.0;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+  // allocate final image
+  if (rank == MASTER) {
+      final_image = (double*) malloc(sizeof(double) * nx * ny);
+      init_image(nx, ny, final_image);
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
-  double tic = wtime();
+  tic = wtime();
+  // SCATTER
+  if (rank == MASTER) {
+    // init your own part
+    for (ii = 1; ii < local_nx + 1; ii++) {
+      for (jj = 0; jj < ny; jj++) {
+        image[jj + ii * ny] = final_image[jj + (ii - 1) * ny];
+      }
+    }
+    // scatter
+    for (kk = 1; kk < size; kk++ ) {
+      for (ii = kk * nx / size; ii < (kk + 1) * nx / size; ii++) {
+        MPI_Send(&final_image[ii * ny],ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD);
+      }
+    }
+  }
+  else {
+    for (ii = 1; ii < local_nx + 1; ii++) {
+      MPI_Recv(printbuf,ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD,&status);
+      for (jj = 0; jj < ny; jj++) {
+        image[jj + ii * ny] = printbuf[jj];
+      }
+    }
+  }
 
   /*
   ** Perform 5-point stencil.
@@ -276,6 +257,7 @@ int main(int argc, char* argv[])
   **   ranks in order, and saves them.
   */
 
+  // GATHER
   for (ii = 1; ii < local_nx + 1; ii++) {
     if(rank == MASTER) {
       for (jj = 0; jj < ny; jj++) {
@@ -295,7 +277,7 @@ int main(int argc, char* argv[])
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
-  double toc = wtime();
+  toc = wtime();
 
   // Output timing
   if (rank == MASTER) {
