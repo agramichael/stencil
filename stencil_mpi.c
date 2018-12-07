@@ -225,7 +225,7 @@ int main(int argc, char* argv[])
 
       // right edge
       for (jj = 1; jj < ny - 1; jj++) {
-        k = jj + (local_nx + 1) * ny;
+        k = jj + local_nx * ny;
         image[k] = tmp_image[k] * 0.6;
         image[k] += tmp_image[k-ny] * 0.1;
         image[k] += tmp_image[k-1] * 0.1;
@@ -327,7 +327,7 @@ int main(int argc, char* argv[])
   MPI_Finalize();
 
   /* free up allocated memory */
-  free(final_image);
+  if (rank == MASTER) free(final_image);
   free(tmp_image);
   free(image);
   free(sendbuf);

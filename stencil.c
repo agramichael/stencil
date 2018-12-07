@@ -174,7 +174,7 @@ int main(int argc, char *argv[]) {
   // Set the input image
   init_image(nx, ny, image, tmp_image);
 
-  // // Call the stencil kernel
+  // Call the stencil kernel
   // double tic = wtime();
   // for (int t = 0; t < niters; ++t) {
   //   stencil(nx, ny, image, tmp_image);
