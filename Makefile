@@ -1,6 +1,6 @@
 EXE=stencil_mpi.exe
 
-CFLAGS= -xAVX -std=c99 -Wall
+CFLAGS= -std=c99 -Wall
 
 all: $(EXE)
 
