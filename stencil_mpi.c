@@ -38,6 +38,7 @@ int main(int argc, char* argv[])
   float *printbuf;      /* buffer to hold values for printing */
   float *final_image;
   double tic, toc;
+  int max_ii, max_jj, true_nx, num_iters;
 
   /* MPI_Init returns once it has started up processes */
   /* get size and rank */
@@ -107,7 +108,8 @@ int main(int argc, char* argv[])
   /*
   ** Perform 5-point stencil.
   */
-  for (iter = 0; iter < niters*2; iter++) {
+  num_iters = niters*2;
+  for (iter = 0; iter < num_iters; iter++) {
     /*
     ** halo exchange for the local grids (image):
     ** - first send to the left and receive from the right,
@@ -143,7 +145,8 @@ int main(int argc, char* argv[])
     /*
     ** copy the old solution into the tmp_image grid
     */
-    for (ii = 0; ii < local_nx + 2; ii++) {
+    true_nx = local_nx + 2;
+    for (ii = 0; ii < true_nx; ii++) {
       for (jj = 0; jj < ny; jj++) {
 	       tmp_image[jj + ii * ny] = image[jj + ii * ny];
       }
@@ -166,7 +169,8 @@ int main(int argc, char* argv[])
       image[k] += tmp_image[k-1] * (float) 0.1;
 
       //left edge
-      for (jj = 1; jj < ny - 1; jj++) {
+      max_jj = ny - 1;
+      for (jj = 1; jj < max_jj; jj++) {
         k = jj + ny;
         image[k] = tmp_image[k] * (float) 0.6;
         image[k] += tmp_image[k+ny] * (float) 0.1;
@@ -175,7 +179,8 @@ int main(int argc, char* argv[])
       }
 
       // core
-      for (ii = 2; ii < local_nx + 1; ii++) {
+      max_ii = local_nx + 1;
+      for (ii = 2; ii < max_ii; ii++) {
         // top edge of local grid (jj = 0)
         k = ii * ny;
         image[k] = tmp_image[k] * (float) 0.6;
@@ -189,7 +194,8 @@ int main(int argc, char* argv[])
         image[k] += tmp_image[k+ny] * (float) 0.1;
         image[k] += tmp_image[k-1] * (float) 0.1;
         // core cells of local grid
-        for (jj = 1; jj < ny - 1; jj++) {
+        max_jj = ny - 1;
+        for (jj = 1; jj < max_jj; jj++) {
           k = jj + ii * ny;
           image[k] = tmp_image[k] * (float) 0.6;
           image[k] += tmp_image[k-ny] * (float) 0.1;
@@ -213,7 +219,8 @@ int main(int argc, char* argv[])
       image[k] += tmp_image[k-1] * (float) 0.1;
 
       // right edge
-      for (jj = 1; jj < ny - 1; jj++) {
+      max_jj = ny - 1;
+      for (jj = 1; jj < max_jj; jj++) {
         k = jj + local_nx * ny;
         image[k] = tmp_image[k] * (float) 0.6;
         image[k] += tmp_image[k-ny] * (float) 0.1;
@@ -234,7 +241,8 @@ int main(int argc, char* argv[])
         image[k] += tmp_image[k+ny] * (float) 0.1;
         image[k] += tmp_image[k-1] * (float) 0.1;
         // core cells of local grid
-        for (jj = 1; jj < ny - 1; jj++) {
+        max_jj = ny - 1;
+        for (jj = 1; jj < max_jj; jj++) {
           k = jj + ii * ny;
           image[k] = tmp_image[k] * (float) 0.6;
           image[k] += tmp_image[k-ny] * (float) 0.1;
@@ -245,7 +253,8 @@ int main(int argc, char* argv[])
       }
     }
     else {
-      for (ii = 1; ii < local_nx + 1; ii++) {
+      max_ii = local_nx + 1;
+      for (ii = 1; ii < max_ii; ii++) {
         // top edge of local grid (jj = 0)
         k = ii * ny;
         image[k] = tmp_image[k] * (float) 0.6;
@@ -259,7 +268,8 @@ int main(int argc, char* argv[])
         image[k] += tmp_image[k+ny] * (float) 0.1;
         image[k] += tmp_image[k-1] * (float) 0.1;
         // core cells of local grid
-        for (jj = 1; jj < ny - 1; jj++) {
+        max_jj = ny - 1;
+        for (jj = 1; jj < max_jj; jj++) {
           k = jj + ii * ny;
           image[k] = tmp_image[k] * (float) 0.6;
           image[k] += tmp_image[k-ny] * (float) 0.1;
