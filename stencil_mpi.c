@@ -16,29 +16,27 @@ double wtime(void);
 
 int main(int argc, char* argv[])
 {
-  int ii,jj;             /* row and column indices for the grid */
-  int i,j;               /* stencil indices */
-  int k;
-  int kk;                /* index for looping over ranks */
-  int start_row,end_row; /* rank dependent looping indices */
-  int iter;              /* index for timestep iterations */
-  int rank;              /* the rank of this process */
-  int left;              /* the rank of the process to the left */
-  int right;             /* the rank of the process to the right */
-  int size;              /* number of processes in the communicator */
-  int tag = 0;           /* scope for adding extra information to a message */
-  MPI_Status status;     /* struct used by MPI_Recv */
-  int local_nx;       /* number of rows apportioned to this rank */
-  int remote_nx;      /* number of columns apportioned to a remote rank */
-  int nx, ny, niters;
-  float *tmp_image;            /* local temperature grid at time t - 1 */
-  float *image;            /* local temperature grid at time t     */
-  float *sendbuf;       /* buffer to hold values to send */
-  float *recvbuf;       /* buffer to hold received values */
-  float *printbuf;      /* buffer to hold values for printing */
-  float *final_image;
-  double tic, toc;
-  int max_ii, max_jj, true_nx, num_iters;
+  int ii,jj;              /* row and column indices for the grid */
+  int k;                  /* stencil index */
+  int kk;                 /* index for looping over ranks */
+  int iter;               /* index for iterations */
+  int num_iters           /* number of times stencil is performed */
+  int rank;               /* the rank of this process */
+  int left;               /* the rank of the process to the left */
+  int right;              /* the rank of the process to the right */
+  int size;               /* number of processes in the communicator */
+  int tag = 0;            /* default message tag */
+  MPI_Status status;      /* struct used by MPI_Recv */
+  int local_nx;           /* number of columns apportioned to this rank */
+  int remote_nx;          /* number of columns apportioned to a remote rank */
+  int nx, ny, niters;     /* command line arguments */
+  float *tmp_image;       /* local grid at previous iteration */
+  float *image;           /* local grid at current iteration     */
+  float *sendbuf;         /* buffer to hold values to send */
+  float *recvbuf;         /* buffer to hold received values */
+  float *printbuf;        /* buffer to hold values for output */
+  float *final_image;     /* final image */
+  double tic, toc;        /* timer variables */
 
   /* MPI_Init returns once it has started up processes */
   /* get size and rank */
@@ -59,20 +57,17 @@ int main(int argc, char* argv[])
 
   /*
   ** determine process ranks to the left and right of rank
-  ** respecting periodic boundary conditions
   */
   left = (rank == MASTER) ? (rank + size - 1) : (rank - 1);
   right = (rank + 1) % size;
 
   /*
   ** determine local grid size
-  ** each rank gets all the rows, but a subset of the number of columns
   */
   local_nx = calc_nx_from_rank(rank, size, nx);
   /*
   ** allocate space for:
-  ** - the local grid (2 extra columns added for the halos)
-  ** - we'll use local grids for current and previous timesteps
+  ** - the local grids (2 extra columns added for the halos)
   ** - buffers for message passing
   */
   tmp_image = (float*) malloc(sizeof(float) * (local_nx+2) * ny);
@@ -93,6 +88,7 @@ int main(int argc, char* argv[])
   //timing
   tic = wtime();
 
+  // Scatter image
   int *sendcounts = (int *) malloc(sizeof(int) * size);
   int *displs = (int *) malloc(sizeof(int) * size);
   for (kk = 0; kk < size; kk++) {
@@ -145,8 +141,7 @@ int main(int argc, char* argv[])
     /*
     ** copy the old solution into the tmp_image grid
     */
-    true_nx = local_nx + 2;
-    for (ii = 0; ii < true_nx; ii++) {
+    for (ii = 0; ii < local_nx + 2; ii++) {
       for (jj = 0; jj < ny; jj++) {
 	       tmp_image[jj + ii * ny] = image[jj + ii * ny];
       }
@@ -169,8 +164,7 @@ int main(int argc, char* argv[])
       image[k] += tmp_image[k-1] * (float) 0.1;
 
       //left edge
-      max_jj = ny - 1;
-      for (jj = 1; jj < max_jj; jj++) {
+      for (jj = 1; jj < ny - 1; jj++) {
         k = jj + ny;
         image[k] = tmp_image[k] * (float) 0.6;
         image[k] += tmp_image[k+ny] * (float) 0.1;
@@ -179,8 +173,7 @@ int main(int argc, char* argv[])
       }
 
       // core
-      max_ii = local_nx + 1;
-      for (ii = 2; ii < max_ii; ii++) {
+      for (ii = 2; ii < local_nx + 1; ii++) {
         // top edge of local grid (jj = 0)
         k = ii * ny;
         image[k] = tmp_image[k] * (float) 0.6;
@@ -194,8 +187,7 @@ int main(int argc, char* argv[])
         image[k] += tmp_image[k+ny] * (float) 0.1;
         image[k] += tmp_image[k-1] * (float) 0.1;
         // core cells of local grid
-        max_jj = ny - 1;
-        for (jj = 1; jj < max_jj; jj++) {
+        for (jj = 1; jj < ny - 1; jj++) {
           k = jj + ii * ny;
           image[k] = tmp_image[k] * (float) 0.6;
           image[k] += tmp_image[k-ny] * (float) 0.1;
@@ -219,8 +211,7 @@ int main(int argc, char* argv[])
       image[k] += tmp_image[k-1] * (float) 0.1;
 
       // right edge
-      max_jj = ny - 1;
-      for (jj = 1; jj < max_jj; jj++) {
+      for (jj = 1; jj < ny - 1; jj++) {
         k = jj + local_nx * ny;
         image[k] = tmp_image[k] * (float) 0.6;
         image[k] += tmp_image[k-ny] * (float) 0.1;
@@ -241,8 +232,7 @@ int main(int argc, char* argv[])
         image[k] += tmp_image[k+ny] * (float) 0.1;
         image[k] += tmp_image[k-1] * (float) 0.1;
         // core cells of local grid
-        max_jj = ny - 1;
-        for (jj = 1; jj < max_jj; jj++) {
+        for (jj = 1; jj < ny - 1; jj++) {
           k = jj + ii * ny;
           image[k] = tmp_image[k] * (float) 0.6;
           image[k] += tmp_image[k-ny] * (float) 0.1;
@@ -253,8 +243,7 @@ int main(int argc, char* argv[])
       }
     }
     else {
-      max_ii = local_nx + 1;
-      for (ii = 1; ii < max_ii; ii++) {
+      for (ii = 1; ii < local_nx + 1; ii++) {
         // top edge of local grid (jj = 0)
         k = ii * ny;
         image[k] = tmp_image[k] * (float) 0.6;
@@ -268,8 +257,7 @@ int main(int argc, char* argv[])
         image[k] += tmp_image[k+ny] * (float) 0.1;
         image[k] += tmp_image[k-1] * (float) 0.1;
         // core cells of local grid
-        max_jj = ny - 1;
-        for (jj = 1; jj < max_jj; jj++) {
+        for (jj = 1; jj < ny - 1; jj++) {
           k = jj + ii * ny;
           image[k] = tmp_image[k] * (float) 0.6;
           image[k] += tmp_image[k-ny] * (float) 0.1;
@@ -281,18 +269,12 @@ int main(int argc, char* argv[])
     }
   }
 
-  /*
-  ** at the end, save the solution to final_image.
-  ** for each column of the grid:
-  ** - rank 0 first save its cell values
-  ** - then it receives column values sent from the other
-  **   ranks in order, and saves them.
-  */
-
+  // Gather image
   MPI_Gatherv(&image[ny], local_nx*ny, MPI_FLOAT,
                 final_image, sendcounts, displs,
                 MPI_FLOAT, MASTER, MPI_COMM_WORLD);
 
+  // timing
   toc = wtime();
 
   // Output timing
@@ -306,7 +288,7 @@ int main(int argc, char* argv[])
   if(rank == MASTER) {
     output_image(OUTPUT_FILE, nx, ny, final_image);
   }
-  /* don't forget to tidy up when we're done */
+
   MPI_Finalize();
 
   /* free up allocated memory */
@@ -317,7 +299,6 @@ int main(int argc, char* argv[])
   free(recvbuf);
   free(printbuf);
 
-  /* and exit the program */
   return EXIT_SUCCESS;
 }
 
