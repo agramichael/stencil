@@ -1,6 +1,6 @@
 EXE=stencil_mpi.exe
 
-CFLAGS=-Wall -g -DDEBUG
+CFLAGS=-std=c99 -Wall -g -DDEBUG
 
 all: $(EXE)
 

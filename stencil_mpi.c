@@ -83,30 +83,32 @@ int main(int argc, char* argv[])
   remote_nx = calc_nx_from_rank(size-1, size, nx);
   printbuf = (double*) malloc(sizeof(double) * (remote_nx+2) * ny);
 
-  // allocate final image
+  // allocate final image in master
   if (rank == MASTER) {
       final_image = (double*) malloc(sizeof(double) * nx * ny);
       init_image(nx, ny, final_image);
   }
 
-  MPI_Barrier(MPI_COMM_WORLD);
+  //timing
   tic = wtime();
-  // SCATTER
+
   if (rank == MASTER) {
-    // init your own part
+    // master initialises own section
     for (ii = 1; ii < local_nx + 1; ii++) {
       for (jj = 0; jj < ny; jj++) {
         image[jj + ii * ny] = final_image[jj + (ii - 1) * ny];
       }
     }
-    // scatter
+    // master scatters other sections
     for (kk = 1; kk < size; kk++ ) {
-      for (ii = kk * nx / size; ii < (kk + 1) * nx / size; ii++) {
+      remote_nx = calc_nx_from_rank(kk, size, nx);
+      for (ii = kk * local_nx; ii < remote_nx + kk * local_nx; ii++) {
         MPI_Send(&final_image[ii * ny],ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD);
       }
     }
   }
   else {
+    // workers receive their section
     for (ii = 1; ii < local_nx + 1; ii++) {
       MPI_Recv(printbuf,ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD,&status);
       for (jj = 0; jj < ny; jj++) {
@@ -218,7 +220,7 @@ int main(int argc, char* argv[])
       image[k] += tmp_image[k+1] * 0.1;
 
       // bottom right
-      k = local_nx * ny + (ny - 1);
+      k = (local_nx + 1) * ny - 1;
       image[k] = tmp_image[k] * 0.6;
       image[k] += tmp_image[k-ny] * 0.1;
       image[k] += tmp_image[k-1] * 0.1;
@@ -291,25 +293,58 @@ int main(int argc, char* argv[])
   */
 
   // GATHER
-  for (ii = 1; ii < local_nx + 1; ii++) {
-    if(rank == MASTER) {
+  if (rank == MASTER) {
+    for (ii = 1; ii < local_nx + 1; ii++) {
       for (jj = 0; jj < ny; jj++) {
          final_image[jj + (ii-1) * ny] = image[jj + ii * ny];
       }
-      for (kk = 1; kk < size; kk++) { /* loop over other ranks */
-	       remote_nx = calc_nx_from_rank(kk, size, nx);
-	       MPI_Recv(printbuf,ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD,&status);
-	       for (jj = 0; jj < ny; jj++) {
-           final_image[jj + (kk * local_nx + (ii - 1)) * ny] = printbuf[jj];
-	       }
+    }
+    for (kk = 1; kk < size; kk++) {
+      remote_nx = calc_nx_from_rank(kk, size, nx);
+      for (ii = kk * local_nx; ii < remote_nx + kk * local_nx; ii++) {
+        MPI_Recv(printbuf,ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD,&status);
+        for (jj = 0; jj < ny; jj++) {
+          final_image[jj + ii * ny] = printbuf[jj];
+        }
       }
     }
-    else {
+  }
+  else {
+    for (ii = 1; ii < local_nx + 1; ii++) {
       MPI_Send(&image[ii * ny],ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
     }
   }
+  // for (ii = 1; ii < local_nx + 1; ii++) {
+  //   if(rank == MASTER) {
+  //     for (jj = 0; jj < ny; jj++) {
+  //        final_image[jj + (ii-1) * ny] = image[jj + ii * ny];
+  //     }
+  //     for (kk = 1; kk < size; kk++) { /* loop over other ranks */
+	//        remote_nx = calc_nx_from_rank(kk, size, nx);
+  //        MPI_Recv(printbuf,ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD,&status);
+  //        for (jj = 0; jj < ny; jj++) {
+  //          final_image[jj + (kk * local_nx + (ii - 1)) * ny] = printbuf[jj];
+  //        }
+  //     }
+  //   }
+  //   else {
+  //     MPI_Send(&image[ii * ny],ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
+  //   }
+  // }
 
-  MPI_Barrier(MPI_COMM_WORLD);
+  // if (rank == MASTER) {
+  //   if (calc_nx_from_rank(size-1,size,nx) != local_nx) {
+  //     for (ii = local_nx * size; ii < nx; ii++){
+  //       MPI_Recv(printbuf,ny,MPI_DOUBLE,size-1,tag,MPI_COMM_WORLD,&status);
+  //       for (jj = 0; jj < ny; jj++) {
+  //         final_image[jj + ii * ny] = printbuf[jj];
+  //       }
+  //     }
+  //   }
+  // }
+
+
+
   toc = wtime();
 
   // Output timing
