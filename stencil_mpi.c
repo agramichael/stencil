@@ -339,17 +339,18 @@ int main(int argc, char* argv[])
 }
 
 void init_image(const int nx, const int ny, double *image) {
+  int i,j,ii,jj;
   // Zero everything
-  for (int j = 0; j < ny; ++j) {
-    for (int i = 0; i < nx; ++i) {
+  for (j = 0; j < ny; ++j) {
+    for (i = 0; i < nx; ++i) {
       image[j+i*ny] = 0.0;
     }
   }
   // Checkerboard
-  for (int j = 0; j < 8; ++j) {
-    for (int i = 0; i < 8; ++i) {
-      for (int jj = j*ny/8; jj < (j+1)*ny/8; ++jj) {
-        for (int ii = i*nx/8; ii < (i+1)*nx/8; ++ii) {
+  for (j = 0; j < 8; ++j) {
+    for (i = 0; i < 8; ++i) {
+      for (jj = j*ny/8; jj < (j+1)*ny/8; ++jj) {
+        for (ii = i*nx/8; ii < (i+1)*nx/8; ++ii) {
           if ((i+j)%2){
             image[jj+ii*ny] = 100.0;
           }
