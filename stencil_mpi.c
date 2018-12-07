@@ -168,92 +168,92 @@ int main(int argc, char* argv[])
     if (rank == MASTER) {
       //top left
       k = ny;
-      image[k] = tmp_image[k] * 0.6;
-      image[k] += tmp_image[k+ny] * 0.1;
-      image[k] += tmp_image[k+1] * 0.1;
+      image[k] = tmp_image[k] * (float) 0.6;
+      image[k] += tmp_image[k+ny] * (float) 0.1;
+      image[k] += tmp_image[k+1] * (float) 0.1;
 
       // bottom left
       k = 2 * ny - 1;
-      image[k] = tmp_image[k] * 0.6;
-      image[k] += tmp_image[k+ny] * 0.1;
-      image[k] += tmp_image[k-1] * 0.1;
+      image[k] = tmp_image[k] * (float) 0.6;
+      image[k] += tmp_image[k+ny] * (float) 0.1;
+      image[k] += tmp_image[k-1] * (float) 0.1;
 
       //left edge
       for (jj = 1; jj < ny - 1; jj++) {
         k = jj + ny;
-        image[k] = tmp_image[k] * 0.6;
-        image[k] += tmp_image[k+ny] * 0.1;
-        image[k] += tmp_image[k-1] * 0.1;
-        image[k] += tmp_image[k+1] * 0.1;
+        image[k] = tmp_image[k] * (float) 0.6;
+        image[k] += tmp_image[k+ny] * (float) 0.1;
+        image[k] += tmp_image[k-1] * (float) 0.1;
+        image[k] += tmp_image[k+1] * (float) 0.1;
       }
 
       // core
       for (ii = 2; ii < local_nx + 1; ii++) {
         // top edge of local grid (jj = 0)
         k = ii * ny;
-        image[k] = tmp_image[k] * 0.6;
-        image[k] += tmp_image[k-ny] * 0.1;
-        image[k] += tmp_image[k+ny] * 0.1;
-        image[k] += tmp_image[k+1] * 0.1;
+        image[k] = tmp_image[k] * (float) 0.6;
+        image[k] += tmp_image[k-ny] * (float) 0.1;
+        image[k] += tmp_image[k+ny] * (float) 0.1;
+        image[k] += tmp_image[k+1] * (float) 0.1;
         // bottom edge of local grid (jj = ny - 1)
         k = (ny - 1) + ii * ny;
-        image[k] = tmp_image[k] * 0.6;
-        image[k] += tmp_image[k-ny] * 0.1;
-        image[k] += tmp_image[k+ny] * 0.1;
-        image[k] += tmp_image[k-1] * 0.1;
+        image[k] = tmp_image[k] * (float) 0.6;
+        image[k] += tmp_image[k-ny] * (float) 0.1;
+        image[k] += tmp_image[k+ny] * (float) 0.1;
+        image[k] += tmp_image[k-1] * (float) 0.1;
         // core cells of local grid
         for (jj = 1; jj < ny - 1; jj++) {
           k = jj + ii * ny;
-          image[k] = tmp_image[k] * 0.6;
-          image[k] += tmp_image[k-ny] * 0.1;
-          image[k] += tmp_image[k+ny] * 0.1;
-          image[k] += tmp_image[k-1] * 0.1;
-          image[k] += tmp_image[k+1] * 0.1;
+          image[k] = tmp_image[k] * (float) 0.6;
+          image[k] += tmp_image[k-ny] * (float) 0.1;
+          image[k] += tmp_image[k+ny] * (float) 0.1;
+          image[k] += tmp_image[k-1] * (float) 0.1;
+          image[k] += tmp_image[k+1] * (float) 0.1;
         }
       }
     }
     else if (rank == size - 1) {
       // top right
       k = local_nx * ny;
-      image[k] = tmp_image[k] * 0.6;
-      image[k] += tmp_image[k-ny] * 0.1;
-      image[k] += tmp_image[k+1] * 0.1;
+      image[k] = tmp_image[k] * (float) 0.6;
+      image[k] += tmp_image[k-ny] * (float) 0.1;
+      image[k] += tmp_image[k+1] * (float) 0.1;
 
       // bottom right
       k = (local_nx + 1) * ny - 1;
-      image[k] = tmp_image[k] * 0.6;
-      image[k] += tmp_image[k-ny] * 0.1;
-      image[k] += tmp_image[k-1] * 0.1;
+      image[k] = tmp_image[k] * (float) 0.6;
+      image[k] += tmp_image[k-ny] * (float) 0.1;
+      image[k] += tmp_image[k-1] * (float) 0.1;
 
       // right edge
       for (jj = 1; jj < ny - 1; jj++) {
         k = jj + local_nx * ny;
-        image[k] = tmp_image[k] * 0.6;
-        image[k] += tmp_image[k-ny] * 0.1;
-        image[k] += tmp_image[k-1] * 0.1;
-        image[k] += tmp_image[k+1] * 0.1;
+        image[k] = tmp_image[k] * (float) 0.6;
+        image[k] += tmp_image[k-ny] * (float) 0.1;
+        image[k] += tmp_image[k-1] * (float) 0.1;
+        image[k] += tmp_image[k+1] * (float) 0.1;
       }
       // core
       for (ii = 1; ii < local_nx; ii++) {
         k = ii * ny;
-        image[k] = tmp_image[k] * 0.6;
-        image[k] += tmp_image[k-ny] * 0.1;
-        image[k] += tmp_image[k+ny] * 0.1;
-        image[k] += tmp_image[k+1] * 0.1;
+        image[k] = tmp_image[k] * (float) 0.6;
+        image[k] += tmp_image[k-ny] * (float) 0.1;
+        image[k] += tmp_image[k+ny] * (float) 0.1;
+        image[k] += tmp_image[k+1] * (float) 0.1;
         // bottom edge of local grid (jj = ny - 1)
         k = (ny - 1) + ii * ny;
-        image[k] = tmp_image[k] * 0.6;
-        image[k] += tmp_image[k-ny] * 0.1;
-        image[k] += tmp_image[k+ny] * 0.1;
-        image[k] += tmp_image[k-1] * 0.1;
+        image[k] = tmp_image[k] * (float) 0.6;
+        image[k] += tmp_image[k-ny] * (float) 0.1;
+        image[k] += tmp_image[k+ny] * (float) 0.1;
+        image[k] += tmp_image[k-1] * (float) 0.1;
         // core cells of local grid
         for (jj = 1; jj < ny - 1; jj++) {
           k = jj + ii * ny;
-          image[k] = tmp_image[k] * 0.6;
-          image[k] += tmp_image[k-ny] * 0.1;
-          image[k] += tmp_image[k+ny] * 0.1;
-          image[k] += tmp_image[k-1] * 0.1;
-          image[k] += tmp_image[k+1] * 0.1;
+          image[k] = tmp_image[k] * (float) 0.6;
+          image[k] += tmp_image[k-ny] * (float) 0.1;
+          image[k] += tmp_image[k+ny] * (float) 0.1;
+          image[k] += tmp_image[k-1] * (float) 0.1;
+          image[k] += tmp_image[k+1] * (float) 0.1;
         }
       }
     }
@@ -261,24 +261,24 @@ int main(int argc, char* argv[])
       for (ii = 1; ii < local_nx + 1; ii++) {
         // top edge of local grid (jj = 0)
         k = ii * ny;
-        image[k] = tmp_image[k] * 0.6;
-        image[k] += tmp_image[k-ny] * 0.1;
-        image[k] += tmp_image[k+ny] * 0.1;
-        image[k] += tmp_image[k+1] * 0.1;
+        image[k] = tmp_image[k] * (float) 0.6;
+        image[k] += tmp_image[k-ny] * (float) 0.1;
+        image[k] += tmp_image[k+ny] * (float) 0.1;
+        image[k] += tmp_image[k+1] * (float) 0.1;
         // bottom edge of local grid (jj = ny - 1)
         k = (ny - 1) + ii * ny;
-        image[k] = tmp_image[k] * 0.6;
-        image[k] += tmp_image[k-ny] * 0.1;
-        image[k] += tmp_image[k+ny] * 0.1;
-        image[k] += tmp_image[k-1] * 0.1;
+        image[k] = tmp_image[k] * (float) 0.6;
+        image[k] += tmp_image[k-ny] * (float) 0.1;
+        image[k] += tmp_image[k+ny] * (float) 0.1;
+        image[k] += tmp_image[k-1] * (float) 0.1;
         // core cells of local grid
         for (jj = 1; jj < ny - 1; jj++) {
           k = jj + ii * ny;
-          image[k] = tmp_image[k] * 0.6;
-          image[k] += tmp_image[k-ny] * 0.1;
-          image[k] += tmp_image[k+ny] * 0.1;
-          image[k] += tmp_image[k-1] * 0.1;
-          image[k] += tmp_image[k+1] * 0.1;
+          image[k] = tmp_image[k] * (float) 0.6;
+          image[k] += tmp_image[k-ny] * (float) 0.1;
+          image[k] += tmp_image[k+ny] * (float) 0.1;
+          image[k] += tmp_image[k-1] * (float) 0.1;
+          image[k] += tmp_image[k+1] * (float) 0.1;
         }
       }
     }
@@ -348,7 +348,7 @@ void init_image(const int nx, const int ny, float *image) {
   // Zero everything
   for (j = 0; j < ny; ++j) {
     for (i = 0; i < nx; ++i) {
-      image[j+i*ny] = 0.0;
+      image[j+i*ny] = (float) 0.0;
     }
   }
   // Checkerboard
@@ -357,7 +357,7 @@ void init_image(const int nx, const int ny, float *image) {
       for (jj = j*ny/8; jj < (j+1)*ny/8; ++jj) {
         for (ii = i*nx/8; ii < (i+1)*nx/8; ++ii) {
           if ((i+j)%2){
-            image[jj+ii*ny] = 100.0;
+            image[jj+ii*ny] = (float) 100.0;
           }
         }
       }
