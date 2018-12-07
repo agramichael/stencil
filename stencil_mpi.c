@@ -156,8 +156,8 @@ int main(int argc, char* argv[])
     /*
     ** copy the old solution into the tmp_image grid
     */
-    for (jj = 0; jj < ny; jj++) {
-      for (ii = 0; ii < local_nx + 2; ii++) {
+    for (ii = 0; ii < local_nx + 2; ii++) {
+      for (jj = 0; jj < ny; jj++) {
 	       tmp_image[jj + ii * ny] = image[jj + ii * ny];
       }
     }
@@ -314,36 +314,6 @@ int main(int argc, char* argv[])
       MPI_Send(&image[ii * ny],ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
     }
   }
-  // for (ii = 1; ii < local_nx + 1; ii++) {
-  //   if(rank == MASTER) {
-  //     for (jj = 0; jj < ny; jj++) {
-  //        final_image[jj + (ii-1) * ny] = image[jj + ii * ny];
-  //     }
-  //     for (kk = 1; kk < size; kk++) { /* loop over other ranks */
-	//        remote_nx = calc_nx_from_rank(kk, size, nx);
-  //        MPI_Recv(printbuf,ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD,&status);
-  //        for (jj = 0; jj < ny; jj++) {
-  //          final_image[jj + (kk * local_nx + (ii - 1)) * ny] = printbuf[jj];
-  //        }
-  //     }
-  //   }
-  //   else {
-  //     MPI_Send(&image[ii * ny],ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
-  //   }
-  // }
-
-  // if (rank == MASTER) {
-  //   if (calc_nx_from_rank(size-1,size,nx) != local_nx) {
-  //     for (ii = local_nx * size; ii < nx; ii++){
-  //       MPI_Recv(printbuf,ny,MPI_DOUBLE,size-1,tag,MPI_COMM_WORLD,&status);
-  //       for (jj = 0; jj < ny; jj++) {
-  //         final_image[jj + ii * ny] = printbuf[jj];
-  //       }
-  //     }
-  //   }
-  // }
-
-
 
   toc = wtime();
 
