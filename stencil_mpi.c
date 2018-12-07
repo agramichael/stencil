@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
   int k;                  /* stencil index */
   int kk;                 /* index for looping over ranks */
   int iter;               /* index for iterations */
-  int num_iters           /* number of times stencil is performed */
+  int num_iters;          /* number of times stencil is performed */
   int rank;               /* the rank of this process */
   int left;               /* the rank of the process to the left */
   int right;              /* the rank of the process to the right */
