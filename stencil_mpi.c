@@ -97,7 +97,7 @@ int main(int argc, char* argv[])
   for (kk = 0; kk < size; kk++) {
     remote_nx = calc_nx_from_rank(kk, size, nx);
     sendcounts[kk] = remote_nx*ny;
-    displs[kk] = kk*local_nx;
+    displs[kk] = kk*local_nx*ny;
   }
 
   MPI_Scatterv(final_image, sendcounts, displs,
