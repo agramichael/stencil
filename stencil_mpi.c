@@ -104,31 +104,6 @@ int main(int argc, char* argv[])
                  MPI_FLOAT, &image[ny], local_nx*ny,
                  MPI_FLOAT, MASTER, MPI_COMM_WORLD);
 
-  // if (rank == MASTER) {
-  //   // master initialises own section
-  //   for (ii = 1; ii < local_nx + 1; ii++) {
-  //     for (jj = 0; jj < ny; jj++) {
-  //       image[jj + ii * ny] = final_image[jj + (ii - 1) * ny];
-  //     }
-  //   }
-  //   // master scatters other sections
-  //   for (kk = 1; kk < size; kk++ ) {
-  //     remote_nx = calc_nx_from_rank(kk, size, nx);
-  //     for (ii = kk * local_nx; ii < remote_nx + kk * local_nx; ii++) {
-  //       MPI_Send(&final_image[ii * ny],ny,MPI_FLOAT,kk,tag,MPI_COMM_WORLD);
-  //     }
-  //   }
-  // }
-  // else {
-  //   // workers receive their section
-  //   for (ii = 1; ii < local_nx + 1; ii++) {
-  //     MPI_Recv(printbuf,ny,MPI_FLOAT,MASTER,tag,MPI_COMM_WORLD,&status);
-  //     for (jj = 0; jj < ny; jj++) {
-  //       image[jj + ii * ny] = printbuf[jj];
-  //     }
-  //   }
-  // }
-
   /*
   ** Perform 5-point stencil.
   */
@@ -303,41 +278,10 @@ int main(int argc, char* argv[])
   ** - then it receives column values sent from the other
   **   ranks in order, and saves them.
   */
-  /* int MPI_Gatherv(const void *sendbuf, int sendcount, MPI_Datatype sendtype,
-                void *recvbuf, const int *recvcounts, const int *displs,
-                MPI_Datatype recvtype, int root, MPI_Comm comm) */
+
   MPI_Gatherv(&image[ny], local_nx*ny, MPI_FLOAT,
                 final_image, sendcounts, displs,
                 MPI_FLOAT, MASTER, MPI_COMM_WORLD);
-
-  if (rank == MASTER) {
-    for (kk = 0; kk < size; kk++) {
-      printf("%d, %d, %d\n", sendcounts[kk], displs[kk], kk);
-    }
-  }
-
-  // GATHER
-  // if (rank == MASTER) {
-  //   for (ii = 1; ii < local_nx + 1; ii++) {
-  //     for (jj = 0; jj < ny; jj++) {
-  //        final_image[jj + (ii-1) * ny] = image[jj + ii * ny];
-  //     }
-  //   }
-  //   for (kk = 1; kk < size; kk++) {
-  //     remote_nx = calc_nx_from_rank(kk, size, nx);
-  //     for (ii = kk * local_nx; ii < remote_nx + kk * local_nx; ii++) {
-  //       MPI_Recv(printbuf,ny,MPI_FLOAT,kk,tag,MPI_COMM_WORLD,&status);
-  //       for (jj = 0; jj < ny; jj++) {
-  //         final_image[jj + ii * ny] = printbuf[jj];
-  //       }
-  //     }
-  //   }
-  // }
-  // else {
-  //   for (ii = 1; ii < local_nx + 1; ii++) {
-  //     MPI_Send(&image[ii * ny],ny,MPI_FLOAT,MASTER,tag,MPI_COMM_WORLD);
-  //   }
-  // }
 
   toc = wtime();
 
