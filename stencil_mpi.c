@@ -8,8 +8,8 @@
 #define OUTPUT_FILE "stencil_mpi.pgm"
 
 /* functions */
-void init_image(const int nx, const int ny, double *image);
-void output_image(const char * file_name, const int nx, const int ny, double *image);
+void init_image(const int nx, const int ny, float *image);
+void output_image(const char * file_name, const int nx, const int ny, float *image);
 int calc_nx_from_rank(int rank, int size, int nx);
 double wtime(void);
 
@@ -31,12 +31,12 @@ int main(int argc, char* argv[])
   int local_nx;       /* number of rows apportioned to this rank */
   int remote_nx;      /* number of columns apportioned to a remote rank */
   int nx, ny, niters;
-  double *tmp_image;            /* local temperature grid at time t - 1 */
-  double *image;            /* local temperature grid at time t     */
-  double *sendbuf;       /* buffer to hold values to send */
-  double *recvbuf;       /* buffer to hold received values */
-  double *printbuf;      /* buffer to hold values for printing */
-  double *final_image;
+  float *tmp_image;            /* local temperature grid at time t - 1 */
+  float *image;            /* local temperature grid at time t     */
+  float *sendbuf;       /* buffer to hold values to send */
+  float *recvbuf;       /* buffer to hold received values */
+  float *printbuf;      /* buffer to hold values for printing */
+  float *final_image;
   double tic, toc;
 
   /* MPI_Init returns once it has started up processes */
@@ -74,18 +74,18 @@ int main(int argc, char* argv[])
   ** - we'll use local grids for current and previous timesteps
   ** - buffers for message passing
   */
-  tmp_image = (double*) malloc(sizeof(double) * (local_nx+2) * ny);
-  image = (double*) malloc(sizeof(double) * (local_nx+2) * ny);
-  sendbuf = (double*) malloc(sizeof(double) * ny);
-  recvbuf = (double*) malloc(sizeof(double) * ny);
+  tmp_image = (float*) malloc(sizeof(float) * (local_nx+2) * ny);
+  image = (float*) malloc(sizeof(float) * (local_nx+2) * ny);
+  sendbuf = (float*) malloc(sizeof(float) * ny);
+  recvbuf = (float*) malloc(sizeof(float) * ny);
   /* The last rank has the most columns apportioned.
      printbuf must be big enough to hold this number */
   remote_nx = calc_nx_from_rank(size-1, size, nx);
-  printbuf = (double*) malloc(sizeof(double) * (remote_nx+2) * ny);
+  printbuf = (float*) malloc(sizeof(float) * (remote_nx+2) * ny);
 
   // allocate final image in master
   if (rank == MASTER) {
-      final_image = (double*) malloc(sizeof(double) * nx * ny);
+      final_image = (float*) malloc(sizeof(float) * nx * ny);
       init_image(nx, ny, final_image);
   }
 
@@ -103,14 +103,14 @@ int main(int argc, char* argv[])
     for (kk = 1; kk < size; kk++ ) {
       remote_nx = calc_nx_from_rank(kk, size, nx);
       for (ii = kk * local_nx; ii < remote_nx + kk * local_nx; ii++) {
-        MPI_Send(&final_image[ii * ny],ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD);
+        MPI_Send(&final_image[ii * ny],ny,MPI_FLOAT,kk,tag,MPI_COMM_WORLD);
       }
     }
   }
   else {
     // workers receive their section
     for (ii = 1; ii < local_nx + 1; ii++) {
-      MPI_Recv(printbuf,ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD,&status);
+      MPI_Recv(printbuf,ny,MPI_FLOAT,MASTER,tag,MPI_COMM_WORLD,&status);
       for (jj = 0; jj < ny; jj++) {
         image[jj + ii * ny] = printbuf[jj];
       }
@@ -136,8 +136,8 @@ int main(int argc, char* argv[])
     for (jj = 0; jj < ny; jj++) {
       sendbuf[jj] = image[jj + ny];
     }
-    MPI_Sendrecv(sendbuf, ny, MPI_DOUBLE, left, tag,
-		 recvbuf, ny, MPI_DOUBLE, right, tag,
+    MPI_Sendrecv(sendbuf, ny, MPI_FLOAT, left, tag,
+		 recvbuf, ny, MPI_FLOAT, right, tag,
 		 MPI_COMM_WORLD, &status);
     for (jj = 0; jj < ny; jj++) {
       image[jj + (local_nx + 1) * ny] = recvbuf[jj];
@@ -147,8 +147,8 @@ int main(int argc, char* argv[])
     for (jj = 0; jj < ny; jj++) {
       sendbuf[jj] = image[jj + local_nx * ny];
     }
-    MPI_Sendrecv(sendbuf, ny, MPI_DOUBLE, right, tag,
-		 recvbuf, ny, MPI_DOUBLE, left, tag,
+    MPI_Sendrecv(sendbuf, ny, MPI_FLOAT, right, tag,
+		 recvbuf, ny, MPI_FLOAT, left, tag,
 		 MPI_COMM_WORLD, &status);
     for (jj = 0; jj < ny; jj++) {
       image[jj] = recvbuf[jj];
@@ -302,7 +302,7 @@ int main(int argc, char* argv[])
     for (kk = 1; kk < size; kk++) {
       remote_nx = calc_nx_from_rank(kk, size, nx);
       for (ii = kk * local_nx; ii < remote_nx + kk * local_nx; ii++) {
-        MPI_Recv(printbuf,ny,MPI_DOUBLE,kk,tag,MPI_COMM_WORLD,&status);
+        MPI_Recv(printbuf,ny,MPI_FLOAT,kk,tag,MPI_COMM_WORLD,&status);
         for (jj = 0; jj < ny; jj++) {
           final_image[jj + ii * ny] = printbuf[jj];
         }
@@ -311,7 +311,7 @@ int main(int argc, char* argv[])
   }
   else {
     for (ii = 1; ii < local_nx + 1; ii++) {
-      MPI_Send(&image[ii * ny],ny,MPI_DOUBLE,MASTER,tag,MPI_COMM_WORLD);
+      MPI_Send(&image[ii * ny],ny,MPI_FLOAT,MASTER,tag,MPI_COMM_WORLD);
     }
   }
 
@@ -343,7 +343,7 @@ int main(int argc, char* argv[])
   return EXIT_SUCCESS;
 }
 
-void init_image(const int nx, const int ny, double *image) {
+void init_image(const int nx, const int ny, float *image) {
   int i,j,ii,jj;
   // Zero everything
   for (j = 0; j < ny; ++j) {
@@ -366,7 +366,7 @@ void init_image(const int nx, const int ny, double *image) {
 }
 
 
-void output_image(const char * file_name, const int nx, const int ny, double *image) {
+void output_image(const char * file_name, const int nx, const int ny, float *image) {
 
   // Open output file
   FILE *fp = fopen(file_name, "w");
@@ -382,7 +382,7 @@ void output_image(const char * file_name, const int nx, const int ny, double *im
   // This is used to rescale the values
   // to a range of 0-255 for output
   int i,j;
-  double maximum = 0.0;
+  float maximum = 0.0;
   for (j = 0; j < ny; ++j) {
     for (i = 0; i < nx; ++i) {
       if (image[j+i*ny] > maximum)
