@@ -106,19 +106,11 @@ int main(int argc, char* argv[])
   /*
   ** Perform 5-point stencil.
   */
-  num_iters = niters*2;
+  //num_iters = niters*2;
   #pragma vector aligned
-  for (iter = 0; iter < num_iters; iter++) {
-    /*
-    ** halo exchange for the local grids (image):
-    ** - first send to the left and receive from the right,
-    ** - then send to the right and receive from the left.
-    ** for each direction:
-    ** - first, pack the send buffer using values from the grid
-    ** - exchange using MPI_Sendrecv()
-    ** - unpack values from the recieve buffer into the grid
-    */
+  for (iter = 0; iter < niters; iter++) {
 
+    // EXCHANGE HALOS from and to image
     /* send to the left, receive from right */
     //put first column in buffer;
     for (jj = 0; jj < ny; jj++) {
@@ -141,132 +133,107 @@ int main(int argc, char* argv[])
     for (jj = 0; jj < ny; jj++) {
       image[jj] = recvbuf[jj];
     }
-    /*
-    ** copy the old solution into the tmp_image grid
-    */
-    for (ii = 0; ii < local_nx + 2; ii++) {
-      for (jj = 0; jj < ny; jj++) {
-	       tmp_image[jj + ii * ny] = image[jj + ii * ny];
-      }
-    }
 
     /*
-    ** compute new values of image using tmp_image
+    ** compute new values of tmp_image using image
     */
     if (rank == MASTER) {
-      //top left
-      k = ny;
-      image[k] = tmp_image[k] * (float) 0.6;
-      image[k] += tmp_image[k+ny] * (float) 0.1;
-      image[k] += tmp_image[k+1] * (float) 0.1;
-
-      // bottom left
-      k = 2 * ny - 1;
-      image[k] = tmp_image[k] * (float) 0.6;
-      image[k] += tmp_image[k+ny] * (float) 0.1;
-      image[k] += tmp_image[k-1] * (float) 0.1;
-
-      //left edge
-      for (jj = 1; jj < ny - 1; jj++) {
-        k = jj + ny;
-        image[k] = tmp_image[k] * (float) 0.6;
-        image[k] += tmp_image[k+ny] * (float) 0.1;
-        image[k] += tmp_image[k-1] * (float) 0.1;
-        image[k] += tmp_image[k+1] * (float) 0.1;
-      }
-
       // core
-      for (ii = 2; ii < local_nx + 1; ii++) {
-        // top edge of local grid (jj = 0)
-        k = ii * ny;
-        image[k] = tmp_image[k] * (float) 0.6;
-        image[k] += tmp_image[k-ny] * (float) 0.1;
-        image[k] += tmp_image[k+ny] * (float) 0.1;
-        image[k] += tmp_image[k+1] * (float) 0.1;
-        // bottom edge of local grid (jj = ny - 1)
-        k = (ny - 1) + ii * ny;
-        image[k] = tmp_image[k] * (float) 0.6;
-        image[k] += tmp_image[k-ny] * (float) 0.1;
-        image[k] += tmp_image[k+ny] * (float) 0.1;
-        image[k] += tmp_image[k-1] * (float) 0.1;
-        // core cells of local grid
-        for (jj = 1; jj < ny - 1; jj++) {
-          k = jj + ii * ny;
-          image[k] = tmp_image[k] * (float) 0.6;
-          image[k] += tmp_image[k-ny] * (float) 0.1;
-          image[k] += tmp_image[k+ny] * (float) 0.1;
-          image[k] += tmp_image[k-1] * (float) 0.1;
-          image[k] += tmp_image[k+1] * (float) 0.1;
+      for (ii = 1; ii < local_nx + 1; ii++) {
+        for (jj = 0; jj < ny; jj++) {
+          k = jj+ii*ny;
+          tmp_image[k] = image[k] * (float) 0.6;
+          if (ii > 1)    tmp_image[k] += image[k - ny] * (float) 0.1;
+          tmp_image[k] += image[k + ny] * (float) 0.1;
+          if (jj > 0)    tmp_image[k] += image[k - 1] * (float) 0.1;
+          if (jj < ny-1) tmp_image[k] += image[k + 1] * (float) 0.1;
         }
       }
     }
     else if (rank == size - 1) {
-      // top right
-      k = local_nx * ny;
-      image[k] = tmp_image[k] * (float) 0.6;
-      image[k] += tmp_image[k-ny] * (float) 0.1;
-      image[k] += tmp_image[k+1] * (float) 0.1;
-
-      // bottom right
-      k = (local_nx + 1) * ny - 1;
-      image[k] = tmp_image[k] * (float) 0.6;
-      image[k] += tmp_image[k-ny] * (float) 0.1;
-      image[k] += tmp_image[k-1] * (float) 0.1;
-
-      // right edge
-      for (jj = 1; jj < ny - 1; jj++) {
-        k = jj + local_nx * ny;
-        image[k] = tmp_image[k] * (float) 0.6;
-        image[k] += tmp_image[k-ny] * (float) 0.1;
-        image[k] += tmp_image[k-1] * (float) 0.1;
-        image[k] += tmp_image[k+1] * (float) 0.1;
-      }
-      // core
-      for (ii = 1; ii < local_nx; ii++) {
-        k = ii * ny;
-        image[k] = tmp_image[k] * (float) 0.6;
-        image[k] += tmp_image[k-ny] * (float) 0.1;
-        image[k] += tmp_image[k+ny] * (float) 0.1;
-        image[k] += tmp_image[k+1] * (float) 0.1;
-        // bottom edge of local grid (jj = ny - 1)
-        k = (ny - 1) + ii * ny;
-        image[k] = tmp_image[k] * (float) 0.6;
-        image[k] += tmp_image[k-ny] * (float) 0.1;
-        image[k] += tmp_image[k+ny] * (float) 0.1;
-        image[k] += tmp_image[k-1] * (float) 0.1;
-        // core cells of local grid
-        for (jj = 1; jj < ny - 1; jj++) {
-          k = jj + ii * ny;
-          image[k] = tmp_image[k] * (float) 0.6;
-          image[k] += tmp_image[k-ny] * (float) 0.1;
-          image[k] += tmp_image[k+ny] * (float) 0.1;
-          image[k] += tmp_image[k-1] * (float) 0.1;
-          image[k] += tmp_image[k+1] * (float) 0.1;
+      for (ii = 1; ii < local_nx + 1; ii++) {
+        for (jj = 0; jj < ny; jj++) {
+          k = jj+ii*ny;
+          tmp_image[k] = image[k] * (float) 0.6;
+          tmp_image[k] += image[k - ny] * (float) 0.1;
+          if (ii < local_nx) tmp_image[k] += image[k + ny] * (float) 0.1;
+          if (jj > 0)    tmp_image[k] += image[k - 1] * (float) 0.1;
+          if (jj < ny-1) tmp_image[k] += image[k + 1] * (float) 0.1;
         }
       }
     }
     else {
       for (ii = 1; ii < local_nx + 1; ii++) {
-        // top edge of local grid (jj = 0)
-        k = ii * ny;
-        image[k] = tmp_image[k] * (float) 0.6;
-        image[k] += tmp_image[k-ny] * (float) 0.1;
-        image[k] += tmp_image[k+ny] * (float) 0.1;
-        image[k] += tmp_image[k+1] * (float) 0.1;
-        // bottom edge of local grid (jj = ny - 1)
-        k = (ny - 1) + ii * ny;
-        image[k] = tmp_image[k] * (float) 0.6;
-        image[k] += tmp_image[k-ny] * (float) 0.1;
-        image[k] += tmp_image[k+ny] * (float) 0.1;
-        image[k] += tmp_image[k-1] * (float) 0.1;
-        // core cells of local grid
-        for (jj = 1; jj < ny - 1; jj++) {
-          k = jj + ii * ny;
+        for (jj = 0; jj < ny; jj++) {
+          k = jj+ii*ny;
+          tmp_image[k] = image[k] * (float) 0.6;
+          tmp_image[k] += image[k - ny] * (float) 0.1;
+          tmp_image[k] += image[k + ny] * (float) 0.1;
+          if (jj > 0)    tmp_image[k] += image[k - 1] * (float) 0.1;
+          if (jj < ny-1) tmp_image[k] += image[k + 1] * (float) 0.1;
+        }
+      }
+    }
+    // EXCHANGE HALOS from and to tmp_image
+    /* send to the left, receive from right */
+    //put first column in buffer;
+    for (jj = 0; jj < ny; jj++) {
+      sendbuf[jj] = tmp_image[jj + ny];
+    }
+    MPI_Sendrecv(sendbuf, ny, MPI_FLOAT, left, tag,
+		 recvbuf, ny, MPI_FLOAT, right, tag,
+		 MPI_COMM_WORLD, &status);
+    for (jj = 0; jj < ny; jj++) {
+      tmp_image[jj + (local_nx + 1) * ny] = recvbuf[jj];
+    }
+
+    /* send to the right, receive from left */
+    for (jj = 0; jj < ny; jj++) {
+      sendbuf[jj] = tmp_image[jj + local_nx * ny];
+    }
+    MPI_Sendrecv(sendbuf, ny, MPI_FLOAT, right, tag,
+		 recvbuf, ny, MPI_FLOAT, left, tag,
+		 MPI_COMM_WORLD, &status);
+    for (jj = 0; jj < ny; jj++) {
+      tmp_image[jj] = recvbuf[jj];
+    }
+    /*
+    ** compute new values of image using tmp_image
+    */
+    if (rank == MASTER) {
+      // core
+      for (ii = 1; ii < local_nx + 1; ii++) {
+        for (jj = 0; jj < ny; jj++) {
+          k = jj+ii*ny;
           image[k] = tmp_image[k] * (float) 0.6;
-          image[k] += tmp_image[k-ny] * (float) 0.1;
-          image[k] += tmp_image[k+ny] * (float) 0.1;
-          image[k] += tmp_image[k-1] * (float) 0.1;
-          image[k] += tmp_image[k+1] * (float) 0.1;
+          if (ii > 1)    image[k] += tmp_image[k - ny] * (float) 0.1;
+          image[k] += tmp_image[k + ny] * (float) 0.1;
+          if (jj > 0)    image[k] += tmp_image[k - 1] * (float) 0.1;
+          if (jj < ny-1) image[k] += tmp_image[k + 1] * (float) 0.1;
+        }
+      }
+    }
+    else if (rank == size - 1) {
+      for (ii = 1; ii < local_nx + 1; ii++) {
+        for (jj = 0; jj < ny; jj++) {
+          k = jj+ii*ny;
+          image[k] = tmp_image[k] * (float) 0.6;
+          image[k] += tmp_image[k - ny] * (float) 0.1;
+          if (ii < local_nx) image[k] += tmp_image[k + ny] * (float) 0.1;
+          if (jj > 0)    image[k] += tmp_image[k - 1] * (float) 0.1;
+          if (jj < ny-1) image[k] += tmp_image[k + 1] * (float) 0.1;
+        }
+      }
+    }
+    else {
+      for (ii = 1; ii < local_nx + 1; ii++) {
+        for (jj = 0; jj < ny; jj++) {
+          k = jj+ii*ny;
+          image[k] = tmp_image[k] * (float) 0.6;
+          image[k] += tmp_image[k - ny] * (float) 0.1;
+          image[k] += tmp_image[k + ny] * (float) 0.1;
+          if (jj > 0)    image[k] += tmp_image[k - 1] * (float) 0.1;
+          if (jj < ny-1) image[k] += tmp_image[k + 1] * (float) 0.1;
         }
       }
     }
