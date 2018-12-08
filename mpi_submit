@@ -19,7 +19,7 @@
 #PBS -m a
 
 #! application name
-application="./stencil_mpi.exe"
+application="./stencil.exe"
 
 #! Run options for the application
 options="1024 1024 100"

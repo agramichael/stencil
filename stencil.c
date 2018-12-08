@@ -5,7 +5,7 @@
 #include "mpi.h"
 
 #define MASTER 0
-#define OUTPUT_FILE "stencil_mpi.pgm"
+#define OUTPUT_FILE "stencil.pgm"
 
 /* functions */
 void init_image(const int nx, const int ny, float *image);

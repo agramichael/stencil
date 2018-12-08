@@ -1,4 +1,4 @@
-EXE=stencil_mpi.exe
+EXE=stencil.exe
 
 CFLAGS= -Ofast -restrict -xAVX -std=c99 -Wall
 
