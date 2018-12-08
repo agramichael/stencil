@@ -20,7 +20,6 @@ int main(int argc, char* argv[])
   int k;                  /* stencil index */
   int kk;                 /* index for looping over ranks */
   int iter;               /* index for iterations */
-  int num_iters;          /* number of times stencil is performed */
   int rank;               /* the rank of this process */
   int left;               /* the rank of the process to the left */
   int right;              /* the rank of the process to the right */
@@ -30,43 +29,40 @@ int main(int argc, char* argv[])
   int local_nx;           /* number of columns apportioned to this rank */
   int remote_nx;          /* number of columns apportioned to a remote rank */
   int nx, ny, niters;     /* command line arguments */
-  float *tmp_image;       /* local grid at previous iteration */
-  float *image;           /* local grid at current iteration     */
+  float *tmp_image;       /* local grid */
+  float *image;           /* local grid */
   float *sendbuf;         /* buffer to hold values to send */
   float *recvbuf;         /* buffer to hold received values */
   float *printbuf;        /* buffer to hold values for output */
   float *final_image;     /* final image */
   double tic, toc;        /* timer variables */
-  int *sendcounts;
-  int *displs;/* scatter and gather arrays */
+  int *sendcounts;        /* scatter and gather send/receive counts array */
+  int *displs;            /* scatter and gather displacements array */
 
-  /* MPI_Init returns once it has started up processes */
+  /* start up processes */
   /* get size and rank */
   MPI_Init( &argc, &argv );
   MPI_Comm_size( MPI_COMM_WORLD, &size );
   MPI_Comm_rank( MPI_COMM_WORLD, &rank );
 
-  // Check usage
+  // check usage
   if (argc != 4) {
     fprintf(stderr, "Usage: %s nx ny niters\n", argv[0]);
     exit(EXIT_FAILURE);
   }
 
-  // Initialise problem dimensions from command line arguments
+  // initialise problem dimensions from command line arguments
   nx = atoi(argv[1]);
   ny = atoi(argv[2]);
   niters = atoi(argv[3]);
 
-  /*
-  ** determine process ranks to the left and right of rank
-  */
+  //  get process ranks to the left and right
   left = (rank == MASTER) ? (rank + size - 1) : (rank - 1);
   right = (rank + 1) % size;
 
-  /*
-  ** determine local grid size
-  */
+  // get local grid columns
   local_nx = calc_nx_from_rank(rank, size, nx);
+
   /*
   ** allocate space for:
   ** - the local grids (2 extra columns added for the halos)
@@ -76,8 +72,6 @@ int main(int argc, char* argv[])
   image = (float*) _mm_malloc(sizeof(float) * (local_nx+2) * ny, 32);
   sendbuf = (float*) _mm_malloc(sizeof(float) * ny, 32);
   recvbuf = (float*) _mm_malloc(sizeof(float) * ny, 32);
-  /* The last rank has the most columns apportioned.
-     printbuf must be big enough to hold this number */
   remote_nx = calc_nx_from_rank(size-1, size, nx);
   printbuf = (float*) _mm_malloc(sizeof(float) * (remote_nx+2) * ny, 32);
 
@@ -87,10 +81,10 @@ int main(int argc, char* argv[])
       init_image(nx, ny, final_image);
   }
 
-  //timing
+  // collect start time
   tic = wtime();
 
-  // Scatter image
+  // scatter image
   sendcounts = (int *) _mm_malloc(sizeof(int) * size, 32);
   displs = (int *) _mm_malloc(sizeof(int) * size, 32);
   #pragma vector aligned
@@ -103,16 +97,11 @@ int main(int argc, char* argv[])
                  MPI_FLOAT, &image[ny], local_nx*ny,
                  MPI_FLOAT, MASTER, MPI_COMM_WORLD);
 
-  /*
-  ** Perform 5-point stencil.
-  */
-  //num_iters = niters*2;
+  // perform 5-point stencil
   #pragma vector aligned
   for (iter = 0; iter < niters; iter++) {
-
-    // EXCHANGE HALOS from and to image
-    /* send to the left, receive from right */
-    //put first column in buffer;
+    // exchange halos from and to image
+    // send to the left, receive from the right
     for (jj = 0; jj < ny; jj++) {
       sendbuf[jj] = image[jj + ny];
     }
@@ -122,8 +111,7 @@ int main(int argc, char* argv[])
     for (jj = 0; jj < ny; jj++) {
       image[jj + (local_nx + 1) * ny] = recvbuf[jj];
     }
-
-    /* send to the right, receive from left */
+    // send to the right, receive from the left
     for (jj = 0; jj < ny; jj++) {
       sendbuf[jj] = image[jj + local_nx * ny];
     }
@@ -134,11 +122,8 @@ int main(int argc, char* argv[])
       image[jj] = recvbuf[jj];
     }
 
-    /*
-    ** compute new values of tmp_image using image
-    */
+    // compute new values of tmp_image using image
     if (rank == MASTER) {
-      // core
       for (ii = 1; ii < local_nx + 1; ii++) {
         for (jj = 0; jj < ny; jj++) {
           k = jj+ii*ny;
@@ -174,9 +159,9 @@ int main(int argc, char* argv[])
         }
       }
     }
-    // EXCHANGE HALOS from and to tmp_image
-    /* send to the left, receive from right */
-    //put first column in buffer;
+
+    // exchange halos from and to tmp_image
+    // send to the left, receive from the right
     for (jj = 0; jj < ny; jj++) {
       sendbuf[jj] = tmp_image[jj + ny];
     }
@@ -186,8 +171,7 @@ int main(int argc, char* argv[])
     for (jj = 0; jj < ny; jj++) {
       tmp_image[jj + (local_nx + 1) * ny] = recvbuf[jj];
     }
-
-    /* send to the right, receive from left */
+    // send to the right, receive from the left
     for (jj = 0; jj < ny; jj++) {
       sendbuf[jj] = tmp_image[jj + local_nx * ny];
     }
@@ -197,11 +181,9 @@ int main(int argc, char* argv[])
     for (jj = 0; jj < ny; jj++) {
       tmp_image[jj] = recvbuf[jj];
     }
-    /*
-    ** compute new values of image using tmp_image
-    */
+
+    // compute new values of image using tmp_image
     if (rank == MASTER) {
-      // core
       for (ii = 1; ii < local_nx + 1; ii++) {
         for (jj = 0; jj < ny; jj++) {
           k = jj+ii*ny;
@@ -239,48 +221,51 @@ int main(int argc, char* argv[])
     }
   }
 
-  // Gather image
+  // gather image
   MPI_Gatherv(&image[ny], local_nx*ny, MPI_FLOAT,
                 final_image, sendcounts, displs,
                 MPI_FLOAT, MASTER, MPI_COMM_WORLD);
 
-  // timing
+  // collect end time
   toc = wtime();
 
-  // Output timing
+  // output total time
   if (rank == MASTER) {
     printf("------------------------------------\n");
     printf(" runtime: %lf s\n", toc-tic);
     printf("------------------------------------\n");
   }
 
-  //Save to stencil.pgm
+  // save to OUTPUT_FILE
   if(rank == MASTER) {
     output_image(OUTPUT_FILE, nx, ny, final_image);
   }
 
+  // end all processes
   MPI_Finalize();
 
-  /* free up allocated memory */
+  // free up allocated memory
   if (rank == MASTER) _mm_free(final_image);
   _mm_free(tmp_image);
   _mm_free(image);
   _mm_free(sendbuf);
   _mm_free(recvbuf);
   _mm_free(printbuf);
+  _mm_free(sendcounts);
+  _mm_free(displs);
 
   return EXIT_SUCCESS;
 }
 
 void init_image(const int nx, const int ny, float *image) {
   int i,j,ii,jj;
-  // Zero everything
+  // zero everything
   for (j = 0; j < ny; ++j) {
     for (i = 0; i < nx; ++i) {
       image[j+i*ny] = (float) 0.0;
     }
   }
-  // Checkerboard
+  // checkerboard
   for (j = 0; j < 8; ++j) {
     for (i = 0; i < 8; ++i) {
       for (jj = j*ny/8; jj < (j+1)*ny/8; ++jj) {
@@ -297,18 +282,18 @@ void init_image(const int nx, const int ny, float *image) {
 
 void output_image(const char * file_name, const int nx, const int ny, float *image) {
 
-  // Open output file
+  // open output file
   FILE *fp = fopen(file_name, "w");
   if (!fp) {
     fprintf(stderr, "Error: Could not open %s\n", OUTPUT_FILE);
     exit(EXIT_FAILURE);
   }
 
-  // Ouptut image header
+  // output image header
   fprintf(fp, "P5 %d %d 255\n", nx, ny);
 
-  // Calculate maximum value of image
-  // This is used to rescale the values
+  // calculate maximum value of image
+  // this is used to rescale the values
   // to a range of 0-255 for output
   int i,j;
   float maximum = 0.0;
@@ -319,14 +304,14 @@ void output_image(const char * file_name, const int nx, const int ny, float *ima
     }
   }
 
-  // Output image, converting to numbers 0-255
+  // output image, converting to numbers 0-255
   for (j = 0; j < ny; ++j) {
     for (i = 0; i < nx; ++i) {
       fputc((char)(255.0*image[j+i*ny]/maximum), fp);
     }
   }
 
-  // Close the file
+  // close the file
   fclose(fp);
 
 }
@@ -345,7 +330,7 @@ int calc_nx_from_rank(int rank, int size, int nx) {
   return ncols;
 }
 
-// Get the current time in seconds since the Epoch
+// get the current time in seconds since the epoch
 double wtime(void) {
   struct timeval tv;
   gettimeofday(&tv, NULL);

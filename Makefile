@@ -10,6 +10,3 @@ $(EXE): %.exe : %.c
 clean:
 	\rm -f $(EXE)
 	\rm -f *.o
-
-stencil: stencil.c
-	icc -std=c99 -Wall -xAVX $^ -o $@
