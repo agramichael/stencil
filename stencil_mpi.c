@@ -37,6 +37,8 @@ int main(int argc, char* argv[])
   float *printbuf;        /* buffer to hold values for output */
   float *final_image;     /* final image */
   double tic, toc;        /* timer variables */
+  int *sendcounts;
+  int *displs;/* scatter and gather arrays */
 
   /* MPI_Init returns once it has started up processes */
   /* get size and rank */
@@ -70,18 +72,18 @@ int main(int argc, char* argv[])
   ** - the local grids (2 extra columns added for the halos)
   ** - buffers for message passing
   */
-  tmp_image = (float*) malloc(sizeof(float) * (local_nx+2) * ny);
-  image = (float*) malloc(sizeof(float) * (local_nx+2) * ny);
-  sendbuf = (float*) malloc(sizeof(float) * ny);
-  recvbuf = (float*) malloc(sizeof(float) * ny);
+  tmp_image = (float*) _mm_malloc(sizeof(float) * (local_nx+2) * ny, 32);
+  image = (float*) _mm_malloc(sizeof(float) * (local_nx+2) * ny, 32);
+  sendbuf = (float*) _mm_malloc(sizeof(float) * ny, 32);
+  recvbuf = (float*) _mm_malloc(sizeof(float) * ny, 32);
   /* The last rank has the most columns apportioned.
      printbuf must be big enough to hold this number */
   remote_nx = calc_nx_from_rank(size-1, size, nx);
-  printbuf = (float*) malloc(sizeof(float) * (remote_nx+2) * ny);
+  printbuf = (float*) _mm_malloc(sizeof(float) * (remote_nx+2) * ny, 32);
 
   // allocate final image in master
   if (rank == MASTER) {
-      final_image = (float*) malloc(sizeof(float) * nx * ny);
+      final_image = (float*) _mm_malloc(sizeof(float) * nx * ny, 32);
       init_image(nx, ny, final_image);
   }
 
@@ -89,14 +91,14 @@ int main(int argc, char* argv[])
   tic = wtime();
 
   // Scatter image
-  int *sendcounts = (int *) malloc(sizeof(int) * size);
-  int *displs = (int *) malloc(sizeof(int) * size);
+  sendcounts = (int *) _mm_malloc(sizeof(int) * size, 32);
+  displs = (int *) _mm_malloc(sizeof(int) * size, 32);
+  #pragma vector aligned
   for (kk = 0; kk < size; kk++) {
     remote_nx = calc_nx_from_rank(kk, size, nx);
     sendcounts[kk] = remote_nx*ny;
     displs[kk] = kk*local_nx*ny;
   }
-
   MPI_Scatterv(final_image, sendcounts, displs,
                  MPI_FLOAT, &image[ny], local_nx*ny,
                  MPI_FLOAT, MASTER, MPI_COMM_WORLD);
@@ -105,6 +107,7 @@ int main(int argc, char* argv[])
   ** Perform 5-point stencil.
   */
   num_iters = niters*2;
+  #pragma vector aligned
   for (iter = 0; iter < num_iters; iter++) {
     /*
     ** halo exchange for the local grids (image):
@@ -292,12 +295,12 @@ int main(int argc, char* argv[])
   MPI_Finalize();
 
   /* free up allocated memory */
-  if (rank == MASTER) free(final_image);
-  free(tmp_image);
-  free(image);
-  free(sendbuf);
-  free(recvbuf);
-  free(printbuf);
+  if (rank == MASTER) _mm_free(final_image);
+  _mm_free(tmp_image);
+  _mm_free(image);
+  _mm_free(sendbuf);
+  _mm_free(recvbuf);
+  _mm_free(printbuf);
 
   return EXIT_SUCCESS;
 }
