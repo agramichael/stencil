@@ -68,18 +68,18 @@ int main(int argc, char* argv[])
   ** - the local grids (2 extra columns added for the halos)
   ** - buffers for message passing
   */
-  tmp_image = (float*) _mm_malloc(sizeof(float) * (local_nx+2) * ny, 64);
-  image = (float*) _mm_malloc(sizeof(float) * (local_nx+2) * ny, 64);
-  sendbuf = (float*) _mm_malloc(sizeof(float) * ny, 64);
-  recvbuf = (float*) _mm_malloc(sizeof(float) * ny, 64);
+  tmp_image = (float*) _mm_malloc(sizeof(float) * (local_nx+2) * ny, 32);
+  image = (float*) _mm_malloc(sizeof(float) * (local_nx+2) * ny, 32);
+  sendbuf = (float*) _mm_malloc(sizeof(float) * ny, 32);
+  recvbuf = (float*) _mm_malloc(sizeof(float) * ny, 32);
   remote_nx = calc_nx_from_rank(size-1, size, nx);
-  printbuf = (float*) _mm_malloc(sizeof(float) * (remote_nx+2) * ny, 64);
-  sendcounts = (int *) _mm_malloc(sizeof(int) * size, 64);
-  displs = (int *) _mm_malloc(sizeof(int) * size, 64);
+  printbuf = (float*) _mm_malloc(sizeof(float) * (remote_nx+2) * ny, 32);
+  sendcounts = (int *) _mm_malloc(sizeof(int) * size, 32);
+  displs = (int *) _mm_malloc(sizeof(int) * size, 32);
 
   // allocate final image in master
   if (rank == MASTER) {
-      final_image = (float*) _mm_malloc(sizeof(float) * nx * ny, 64);
+      final_image = (float*) _mm_malloc(sizeof(float) * nx * ny, 32);
       init_image(nx, ny, final_image);
   }
 
