@@ -1,6 +1,6 @@
 EXE=stencil.exe
 
-CFLAGS= -Ofast -xAVX -std=c99 -Wall
+CFLAGS= -xAVX -std=c99 -Wall
 
 $(EXE): %.exe : %.c
 	mpiicc $(CFLAGS) -o $@ $^
