@@ -83,9 +83,6 @@ int main(int argc, char* argv[])
       init_image(nx, ny, final_image);
   }
 
-  // collect start time
-  tic = wtime();
-
   // scatter image
   #pragma vector aligned
   for (kk = 0; kk < size; kk++) {
@@ -96,6 +93,9 @@ int main(int argc, char* argv[])
   MPI_Scatterv(final_image, sendcounts, displs,
                  MPI_FLOAT, &image[ny], local_nx*ny,
                  MPI_FLOAT, MASTER, MPI_COMM_WORLD);
+
+  // collect start time
+  tic = wtime();
 
   // perform 5-point stencil
   #pragma vector aligned
@@ -221,11 +221,6 @@ int main(int argc, char* argv[])
     }
   }
 
-  // gather image
-  MPI_Gatherv(&image[ny], local_nx*ny, MPI_FLOAT,
-                final_image, sendcounts, displs,
-                MPI_FLOAT, MASTER, MPI_COMM_WORLD);
-
   // collect end time
   toc = wtime();
 
@@ -235,6 +230,11 @@ int main(int argc, char* argv[])
     printf(" runtime: %lf s\n", toc-tic);
     printf("------------------------------------\n");
   }
+
+  // gather image
+  MPI_Gatherv(&image[ny], local_nx*ny, MPI_FLOAT,
+                final_image, sendcounts, displs,
+                MPI_FLOAT, MASTER, MPI_COMM_WORLD);
 
   // save to OUTPUT_FILE
   if(rank == MASTER) {
